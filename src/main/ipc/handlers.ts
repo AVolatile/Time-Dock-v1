@@ -1,0 +1,153 @@
+import { ipcMain } from 'electron'
+import { IPC_CHANNELS } from '@shared/types'
+import type {
+  ClockInPayload,
+  CreateEntryPayload,
+  UpdateEntryPayload,
+  EntriesFilter,
+  ExportPayload,
+  ClientPayload,
+  ProjectPayload,
+  TaskPayload
+} from '@shared/types'
+import { timeTrackingService } from '../services/timeTrackingService'
+import { entryService } from '../services/entryService'
+import { exportService } from '../services/exportService'
+import { clientRepo, projectRepo, taskRepo } from '../database/repositories/entityRepos'
+
+function handleError(fn: (...args: any[]) => any) {
+  return async (_event: Electron.IpcMainInvokeEvent, ...args: any[]) => {
+    try {
+      return { success: true, data: await fn(...args) }
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Unknown error' }
+    }
+  }
+}
+
+export function registerIpcHandlers(): void {
+  // --- Time Tracking ---
+  ipcMain.handle(IPC_CHANNELS.CLOCK_IN, handleError((payload: ClockInPayload) => {
+    return timeTrackingService.clockIn(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.CLOCK_OUT, handleError(() => {
+    return timeTrackingService.clockOut()
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.START_BREAK, handleError(() => {
+    return timeTrackingService.startBreak()
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.END_BREAK, handleError(() => {
+    return timeTrackingService.endBreak()
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.GET_ACTIVE_SESSION, handleError(() => {
+    return timeTrackingService.getActiveSession()
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.SWITCH_PROJECT, handleError((payload: { projectId: string; taskId?: string; clientId?: string }) => {
+    return timeTrackingService.switchProject(payload.projectId, payload.taskId, payload.clientId)
+  }))
+
+  // --- Entries ---
+  ipcMain.handle(IPC_CHANNELS.GET_ENTRIES, handleError((filter: EntriesFilter) => {
+    return entryService.getEntries(filter)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.GET_ENTRY, handleError((id: string) => {
+    return entryService.getEntry(id)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.CREATE_ENTRY, handleError((payload: CreateEntryPayload) => {
+    return entryService.createManualEntry(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_ENTRY, handleError((payload: UpdateEntryPayload) => {
+    return entryService.updateEntry(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ENTRY, handleError((id: string) => {
+    entryService.deleteEntry(id)
+    return true
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.GET_DAY_SUMMARY, handleError((dateStr?: string) => {
+    return entryService.getDaySummary(dateStr ? new Date(dateStr) : undefined)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.GET_WEEK_SUMMARY, handleError((dateStr?: string) => {
+    return entryService.getWeekSummary(dateStr ? new Date(dateStr) : undefined)
+  }))
+
+  // --- Clients ---
+  ipcMain.handle(IPC_CHANNELS.GET_CLIENTS, handleError(() => {
+    return clientRepo.getAll()
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.CREATE_CLIENT, handleError((payload: ClientPayload) => {
+    return clientRepo.create(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_CLIENT, handleError((payload: { id: string } & Partial<ClientPayload>) => {
+    const { id, ...data } = payload
+    return clientRepo.update(id, data)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_CLIENT, handleError((id: string) => {
+    clientRepo.delete(id)
+    return true
+  }))
+
+  // --- Projects ---
+  ipcMain.handle(IPC_CHANNELS.GET_PROJECTS, handleError((clientId?: string) => {
+    return clientId ? projectRepo.getByClientId(clientId) : projectRepo.getAll()
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.CREATE_PROJECT, handleError((payload: ProjectPayload) => {
+    return projectRepo.create(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_PROJECT, handleError((payload: { id: string } & Partial<ProjectPayload>) => {
+    const { id, ...data } = payload
+    return projectRepo.update(id, data)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_PROJECT, handleError((id: string) => {
+    projectRepo.delete(id)
+    return true
+  }))
+
+  // --- Tasks ---
+  ipcMain.handle(IPC_CHANNELS.GET_TASKS, handleError((projectId?: string) => {
+    return projectId ? taskRepo.getByProjectId(projectId) : taskRepo.getAll()
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.CREATE_TASK, handleError((payload: TaskPayload) => {
+    return taskRepo.create(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_TASK, handleError((payload: { id: string } & Partial<TaskPayload>) => {
+    const { id, ...data } = payload
+    return taskRepo.update(id, data)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_TASK, handleError((id: string) => {
+    taskRepo.delete(id)
+    return true
+  }))
+
+  // --- Exports ---
+  ipcMain.handle(IPC_CHANNELS.EXPORT_PDF, handleError((payload: ExportPayload) => {
+    return exportService.exportPDF(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.EXPORT_CSV, handleError((payload: ExportPayload) => {
+    return exportService.exportCSV(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.GET_EXPORT_HISTORY, handleError(() => {
+    return exportService.getExportHistory()
+  }))
+}

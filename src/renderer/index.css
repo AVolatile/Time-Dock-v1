@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-app-region: no-drag;
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(113, 113, 122, 0.3);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(113, 113, 122, 0.5);
+  }
+
+  /* Drag region for native window */
+  .titlebar-drag {
+    -webkit-app-region: drag;
+  }
+  .titlebar-no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-150 ease-out
+      focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-1 focus:ring-offset-surface-0
+      disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply bg-accent text-white hover:bg-accent-hover active:scale-[0.98] shadow-sm;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-text-secondary hover:bg-surface-3 hover:text-text-primary;
+  }
+  .btn-danger {
+    @apply bg-danger/10 text-danger hover:bg-danger/20;
+  }
+  .btn-success {
+    @apply bg-status-working/10 text-status-working hover:bg-status-working/20;
+  }
+  .btn-warning {
+    @apply bg-status-break/10 text-status-break hover:bg-status-break/20;
+  }
+  .btn-sm {
+    @apply px-2.5 py-1 text-xs;
+  }
+  .btn-lg {
+    @apply px-5 py-2.5 text-base;
+  }
+  .btn-icon {
+    @apply p-1.5 rounded-md;
+  }
+
+  .card {
+    @apply bg-surface-2 border border-border rounded-lg p-4;
+  }
+  .card-hover {
+    @apply card hover:border-border-strong hover:shadow-card-hover transition-all duration-150;
+  }
+
+  .input {
+    @apply w-full bg-surface-1 border border-border rounded-md px-3 py-2 text-sm text-text-primary
+      placeholder:text-text-tertiary
+      focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent
+      transition-colors duration-150;
+  }
+
+  .select {
+    @apply input appearance-none cursor-pointer;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium;
+  }
+  .badge-working {
+    @apply bg-status-working-bg text-status-working;
+  }
+  .badge-break {
+    @apply bg-status-break-bg text-status-break;
+  }
+  .badge-off {
+    @apply bg-status-off-bg text-status-off;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-text-secondary mb-1.5;
+  }
+
+  .table-header {
+    @apply text-xs font-medium text-text-tertiary uppercase tracking-wider;
+  }
+
+  .divider {
+    @apply border-t border-border;
+  }
+
+  /* Tray popup specific */
+  .tray-window {
+    @apply bg-surface-1 rounded-xl overflow-hidden border border-border/50;
+    background: rgba(17, 17, 19, 0.95);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  /* Topbar persistent bar */
+  .topbar-window {
+    @apply rounded-xl border border-border/40;
+    background: rgba(17, 17, 19, 0.92);
+    backdrop-filter: blur(24px) saturate(180%);
+    margin: 4px;
+  }
+
+  .topbar-btn {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-100 ease-out
+      disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.96];
+  }
+  .topbar-btn-success {
+    @apply bg-status-working/15 text-status-working hover:bg-status-working/25;
+  }
+  .topbar-btn-warning {
+    @apply bg-status-break/15 text-status-break hover:bg-status-break/25;
+  }
+  .topbar-btn-danger {
+    @apply bg-danger/15 text-danger hover:bg-danger/25;
+  }
+  .topbar-btn-ghost {
+    @apply text-text-secondary hover:bg-surface-4 hover:text-text-primary;
+  }
+}
+
+@layer utilities {
+  .animate-timer-pulse {
+    animation: timerPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes timerPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+}
