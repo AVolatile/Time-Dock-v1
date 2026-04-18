@@ -1,196 +1,633 @@
-import { useState, useEffect, useRef } from 'react'
-import { useAppStore } from '../store'
-import { toast } from '../components/toast/toastStore'
-import { formatTimerDisplay } from '@shared/utils'
-import { WorkStatus } from '@shared/types'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type React from 'react'
 import {
-  Clock, Coffee, LogOut, LogIn, Play, Pause,
-  LayoutDashboard, Briefcase, ChevronDown
+  BarChart3,
+  Briefcase,
+  Building2,
+  Check,
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Clock,
+  Coffee,
+  FolderOpen,
+  LayoutDashboard,
+  ListChecks,
+  TimerReset
 } from 'lucide-react'
+import { WorkStatus, type Client, type DaySummary, type Project, type TimeEntryWithRelations, type WeekSummary } from '@shared/types'
+import { formatDuration, startOfDay } from '@shared/utils'
+import { useAppStore } from '../store'
+import { toast, useToastStore } from '../components/toast/toastStore'
+import { UtilitySessionActions } from '../components/time/UtilitySessionActions'
+import { useLiveSessionTimer } from '../hooks/useLiveSessionTimer'
+import { formatEntryWindow, getEntryNetMinutes, getProjectClient, getStatusMeta } from '../lib/viewUtils'
+
+type ActiveMenu = 'clients' | 'projects' | null
+type WidgetTab = 'overview' | 'work' | 'logs'
+
+interface MenuPosition {
+  left: number
+  top: number
+  maxHeight: number
+}
+
+const MENU_MARGIN = 10
+const MENU_WIDTHS: Record<Exclude<ActiveMenu, null>, number> = {
+  clients: 284,
+  projects: 340
+}
 
 export default function TopbarWidget() {
   const {
-    session, isLoading, clients, projects,
-    refreshSession, clockIn, clockOut, startBreak, endBreak,
-    loadClients, loadProjects
+    session,
+    isLoading,
+    clients,
+    projects,
+    entries,
+    daySummary,
+    weekSummary,
+    refreshSession,
+    clockIn,
+    clockOut,
+    startBreak,
+    endBreak,
+    switchProject,
+    loadClients,
+    loadProjects,
+    loadEntries,
+    loadDaySummary,
+    loadWeekSummary,
+    setActivePage
   } = useAppStore()
+  const toastCount = useToastStore(state => state.toasts.length)
+  const { status, timer, breakTimer } = useLiveSessionTimer(session)
+  const statusMeta = getStatusMeta(status)
 
-  const [elapsed, setElapsed] = useState(0)
-  const [breakElapsed, setBreakElapsed] = useState(0)
-  const [showProjectPicker, setShowProjectPicker] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setInterval>>()
-  const pickerRef = useRef<HTMLDivElement>(null)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null)
+  const [activeTab, setActiveTab] = useState<WidgetTab>('overview')
+  const [selectedClientId, setSelectedClientId] = useState('')
+  const [pendingProjectId, setPendingProjectId] = useState('')
+  const [menuPosition, setMenuPosition] = useState<MenuPosition>({ left: 14, top: 84, maxHeight: 280 })
+
+  const clientButtonRef = useRef<HTMLButtonElement>(null)
+  const projectButtonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const activeClients = useMemo(() => clients.filter(client => client.active), [clients])
+  const activeProjects = useMemo(() => projects.filter(project => project.active), [projects])
+  const selectedClient = selectedClientId ? clients.find(client => client.id === selectedClientId) || null : null
+  const pendingProject = pendingProjectId ? projects.find(project => project.id === pendingProjectId) || null : null
+  const currentProject = session?.entry.project || pendingProject || null
+  const currentClient = session?.entry.client || getProjectClient(currentProject, clients) || selectedClient
+  const visibleProjects = selectedClientId ? activeProjects.filter(project => project.clientId === selectedClientId) : activeProjects
+  const recentEntries = entries.slice(0, 6)
 
   useEffect(() => {
     refreshSession()
     loadClients()
     loadProjects()
-    const poll = setInterval(() => refreshSession(), 10000)
-    return () => clearInterval(poll)
+    refreshPanelData()
+
+    const interval = window.setInterval(() => {
+      refreshSession()
+    }, 10000)
+
+    return () => window.clearInterval(interval)
   }, [])
 
   useEffect(() => {
-    if (session) {
-      setElapsed(session.elapsedSeconds)
-      setBreakElapsed(session.breakElapsedSeconds)
-      timerRef.current = setInterval(() => {
-        if (session.status === WorkStatus.Working) {
-          setElapsed(prev => prev + 1)
-        } else if (session.status === WorkStatus.OnBreak) {
-          setBreakElapsed(prev => prev + 1)
-        }
-      }, 1000)
-    } else {
-      setElapsed(0)
-      setBreakElapsed(0)
+    const sessionClientId = session?.entry.clientId || session?.entry.project?.clientId || ''
+    if (sessionClientId) {
+      setSelectedClientId(sessionClientId)
+      setPendingProjectId('')
     }
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [session])
+  }, [session?.entry.clientId, session?.entry.project?.clientId])
 
-  // Close picker on outside click
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setShowProjectPicker(false)
-      }
+    window.api.setTopbarExpanded(isExpanded).catch(() => undefined)
+  }, [isExpanded])
+
+  useEffect(() => {
+    const surfaceOpen = !isExpanded && toastCount > 0
+    window.api.setTopbarMenuOpen(surfaceOpen).catch(() => undefined)
+  }, [isExpanded, toastCount])
+
+  useEffect(() => {
+    return () => {
+      window.api.setTopbarExpanded(false).catch(() => undefined)
+      window.api.setTopbarMenuOpen(false).catch(() => undefined)
     }
+  }, [])
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (!activeMenu) return
+      const target = event.target as Node
+      const activeButton = activeMenu === 'clients' ? clientButtonRef.current : projectButtonRef.current
+      if (menuRef.current?.contains(target) || activeButton?.contains(target)) return
+      setActiveMenu(null)
+    }
+
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [activeMenu])
 
-  const status = session?.status ?? WorkStatus.OffWork
-  const statusDot = status === WorkStatus.Working
-    ? 'bg-status-working animate-timer-pulse'
-    : status === WorkStatus.OnBreak
-    ? 'bg-status-break'
-    : 'bg-status-off'
+  useLayoutEffect(() => {
+    if (!activeMenu || !isExpanded) return
 
-  const handleClockIn = async () => { try { await clockIn(); toast.success('Clocked in') } catch (e: any) { toast.error('Clock in failed', e.message) } }
-  const handleClockOut = async () => { try { await clockOut(); toast.success('Clocked out') } catch (e: any) { toast.error('Clock out failed', e.message) } }
-  const handleStartBreak = async () => { try { await startBreak(); toast.info('Break started') } catch (e: any) { toast.error('Break failed', e.message) } }
-  const handleEndBreak = async () => { try { await endBreak(); toast.success('Break ended') } catch (e: any) { toast.error('Resume failed', e.message) } }
-  const handleOpenDashboard = () => { window.api.openDashboard() }
+    const updatePosition = () => {
+      const trigger = activeMenu === 'clients' ? clientButtonRef.current : projectButtonRef.current
+      if (!trigger) return
+      const width = MENU_WIDTHS[activeMenu]
+      const rect = trigger.getBoundingClientRect()
+      const maxLeft = Math.max(MENU_MARGIN, window.innerWidth - width - MENU_MARGIN)
+      const left = Math.min(Math.max(MENU_MARGIN, rect.left), maxLeft)
+      const top = Math.min(rect.bottom + 8, window.innerHeight - 190)
+      const availableHeight = Math.max(180, window.innerHeight - top - MENU_MARGIN)
+      setMenuPosition({ left, top, maxHeight: Math.min(activeMenu === 'projects' ? 308 : 270, availableHeight) })
+    }
+
+    updatePosition()
+    const resizeTimer = window.setTimeout(updatePosition, 80)
+    window.addEventListener('resize', updatePosition)
+
+    return () => {
+      window.clearTimeout(resizeTimer)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [activeMenu, clients.length, isExpanded, projects.length])
+
+  async function refreshPanelData() {
+    await Promise.all([
+      loadDaySummary(),
+      loadWeekSummary(),
+      loadEntries({ startDate: startOfDay(new Date()), limit: 8 })
+    ])
+  }
+
+  const toggleMenu = (menu: Exclude<ActiveMenu, null>) => {
+    if (!isExpanded) setIsExpanded(true)
+    setActiveMenu(current => (current === menu ? null : menu))
+  }
+
+  const handleClockIn = async () => {
+    const project = pendingProject
+    const payload = project
+      ? { projectId: project.id, clientId: project.clientId, billable: project.billableDefault }
+      : selectedClientId
+      ? { clientId: selectedClientId }
+      : undefined
+
+    try {
+      await clockIn(payload)
+      setPendingProjectId('')
+      refreshPanelData().catch(() => undefined)
+      toast.success(project ? `Clocked in to ${project.name}` : 'Clocked in')
+    } catch (error: any) {
+      toast.error('Clock in failed', error.message)
+    }
+  }
+
+  const handleClockOut = async () => {
+    try {
+      await clockOut()
+      refreshPanelData().catch(() => undefined)
+      toast.success('Clocked out')
+    } catch (error: any) {
+      toast.error('Clock out failed', error.message)
+    }
+  }
+
+  const handleStartBreak = async () => {
+    try {
+      await startBreak()
+      toast.info('Break started')
+    } catch (error: any) {
+      toast.error('Break failed', error.message)
+    }
+  }
+
+  const handleEndBreak = async () => {
+    try {
+      await endBreak()
+      toast.success('Break ended')
+    } catch (error: any) {
+      toast.error('Resume failed', error.message)
+    }
+  }
+
+  const handleClientSelection = (clientId: string) => {
+    setSelectedClientId(clientId)
+    if (pendingProject && pendingProject.clientId !== clientId) setPendingProjectId('')
+    setActiveMenu('projects')
+  }
+
+  const handleProjectSelection = async (project: Project) => {
+    setSelectedClientId(project.clientId)
+    setActiveMenu(null)
+
+    if (status === WorkStatus.OffWork) {
+      setPendingProjectId(project.id)
+      toast.info('Project selected', `${project.name} will be used when you clock in.`)
+      return
+    }
+
+    if (session?.entry.projectId === project.id) return
+
+    try {
+      await switchProject(project.id, undefined, project.clientId)
+      refreshPanelData().catch(() => undefined)
+      toast.success('Project switched', project.name)
+    } catch (error: any) {
+      toast.error('Project switch failed', error.message)
+    }
+  }
+
+  const handleOpenDashboard = async (page: string = 'overview') => {
+    setActiveMenu(null)
+    setActivePage(page)
+    try {
+      await window.api.openDashboard()
+    } catch (error: any) {
+      toast.error('Dashboard failed to open', error.message)
+    }
+  }
 
   return (
-    <div className="topbar-window h-full flex items-center px-3 gap-2 select-none" style={{ WebkitAppRegion: 'drag' } as any}>
+    <div className="topbar-stage td-utility select-none">
+      <section
+        className={`timedock-widget ${isExpanded ? 'timedock-widget-expanded' : 'timedock-widget-compact'}`}
+        style={{ WebkitAppRegion: 'drag' } as any}
+      >
+        <header className="widget-header">
+          <div className="widget-traffic" aria-hidden="true">
+            <span className="bg-[#ff5f57]" />
+            <span className="bg-[#febc2e]" />
+            <span className="bg-[#28c840]" />
+          </div>
 
-      {/* Brand */}
-      <div className="flex items-center gap-1.5 mr-1">
-        <Clock className="w-3.5 h-3.5 text-accent" />
-        <span className="text-xs font-bold text-text-primary tracking-tight">TimeDock</span>
-      </div>
+          <div className="widget-live">
+            <span className={`td-status-dot ${statusMeta.dotClass}`} />
+            <div className="min-w-0">
+              <div className={`td-mono text-sm font-bold ${utilityStatusClass(status)}`}>{timer}</div>
+              <div className="truncate text-[11px] utility-muted">
+                {currentProject?.name || statusMeta.label}
+                {status === WorkStatus.OnBreak ? ` / Break ${breakTimer}` : ''}
+              </div>
+            </div>
+          </div>
 
-      <div className="w-px h-5 bg-border mx-1" />
-
-      {/* Status Dot + Label */}
-      <div className="flex items-center gap-1.5">
-        <div className={`w-2 h-2 rounded-full ${statusDot}`} />
-        <span className={`text-2xs font-medium uppercase tracking-wider ${
-          status === WorkStatus.Working ? 'text-status-working' :
-          status === WorkStatus.OnBreak ? 'text-status-break' : 'text-status-off'
-        }`}>
-          {status === WorkStatus.Working ? 'Working' : status === WorkStatus.OnBreak ? 'Break' : 'Off'}
-        </span>
-      </div>
-
-      <div className="w-px h-5 bg-border mx-1" />
-
-      {/* Timer */}
-      <div className="flex items-center gap-2">
-        <span className={`font-mono text-sm font-bold tracking-tight ${
-          status === WorkStatus.Working ? 'text-status-working' :
-          status === WorkStatus.OnBreak ? 'text-status-break' : 'text-text-tertiary'
-        }`}>
-          {formatTimerDisplay(elapsed)}
-        </span>
-        {status === WorkStatus.OnBreak && (
-          <span className="flex items-center gap-1 text-2xs text-status-break">
-            <Coffee className="w-3 h-3" />
-            {formatTimerDisplay(breakElapsed)}
-          </span>
-        )}
-      </div>
-
-      <div className="w-px h-5 bg-border mx-1" />
-
-      {/* Current Project */}
-      <div className="relative" ref={pickerRef} style={{ WebkitAppRegion: 'no-drag' } as any}>
-        <button
-          onClick={() => setShowProjectPicker(!showProjectPicker)}
-          className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-surface-4 transition-colors text-xs"
-        >
-          <Briefcase className="w-3 h-3 text-text-tertiary" />
-          <span className="text-text-primary max-w-[140px] truncate">
-            {session?.entry.project?.name || 'No project'}
-          </span>
-          {session?.entry.client && (
-            <span className="text-text-tertiary text-2xs">({session.entry.client.code || session.entry.client.name})</span>
+          {isExpanded && (
+            <div className="widget-context" style={{ WebkitAppRegion: 'no-drag' } as any}>
+              <button
+                ref={clientButtonRef}
+                type="button"
+                onClick={() => toggleMenu('clients')}
+                className={`topbar-selector widget-selector ${activeMenu === 'clients' ? 'topbar-selector-active' : ''}`}
+                aria-expanded={activeMenu === 'clients'}
+                aria-haspopup="menu"
+              >
+                <Building2 className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{selectedClient?.name || currentClient?.name || 'All clients'}</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              </button>
+              <button
+                ref={projectButtonRef}
+                type="button"
+                onClick={() => toggleMenu('projects')}
+                className={`topbar-selector widget-selector widget-selector-project ${activeMenu === 'projects' ? 'topbar-selector-active' : ''}`}
+                aria-expanded={activeMenu === 'projects'}
+                aria-haspopup="menu"
+              >
+                <Briefcase className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{currentProject?.name || 'No project selected'}</span>
+                {currentClient?.code && <span className="shrink-0 text-[10px] utility-muted">{currentClient.code}</span>}
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              </button>
+            </div>
           )}
-          <ChevronDown className="w-3 h-3 text-text-tertiary" />
-        </button>
 
-        {showProjectPicker && (
-          <div className="absolute top-full left-0 mt-1 w-56 bg-surface-1 border border-border rounded-lg shadow-popup p-1.5 max-h-52 overflow-y-auto z-50 animate-slide-down">
-            {projects.filter(p => p.active).map(project => {
-              const client = clients.find(c => c.id === project.clientId)
-              return (
-                <button
-                  key={project.id}
-                  onClick={async () => {
-                    await useAppStore.getState().switchProject(project.id, undefined, project.clientId)
-                    setShowProjectPicker(false)
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded text-xs text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors flex items-center justify-between"
-                >
-                  <span className="truncate">{project.name}</span>
-                  {client && <span className="text-2xs text-text-tertiary ml-2 shrink-0">{client.code}</span>}
-                </button>
-              )
-            })}
-            {projects.filter(p => p.active).length === 0 && (
-              <div className="text-2xs text-text-tertiary px-2 py-2 text-center">No active projects</div>
+          <div className="widget-actions" style={{ WebkitAppRegion: 'no-drag' } as any}>
+            <UtilitySessionActions
+              compact
+              status={status}
+              isLoading={isLoading}
+              onClockIn={handleClockIn}
+              onClockOut={handleClockOut}
+              onStartBreak={handleStartBreak}
+              onEndBreak={handleEndBreak}
+            />
+            {isExpanded && (
+              <button type="button" onClick={() => handleOpenDashboard(activeTab)} className="topbar-icon-btn" aria-label="Open dashboard">
+                <LayoutDashboard className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => { setActiveMenu(null); setIsExpanded(current => !current) }}
+              className="topbar-icon-btn widget-expand-btn"
+              aria-label={isExpanded ? 'Collapse widget' : 'Expand widget'}
+              aria-expanded={isExpanded}
+            >
+              {isExpanded ? <ChevronsDownUp className="h-3.5 w-3.5" /> : <ChevronsUpDown className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        </header>
+
+        {isExpanded && (
+          <div className="widget-dashboard animate-fade-in" style={{ WebkitAppRegion: 'no-drag' } as any}>
+            <div className="widget-tabbar" role="tablist" aria-label="Topbar widget sections">
+              <WidgetTabButton active={activeTab === 'overview'} icon={<BarChart3 className="h-3.5 w-3.5" />} label="Overview" onClick={() => setActiveTab('overview')} />
+              <WidgetTabButton active={activeTab === 'work'} icon={<FolderOpen className="h-3.5 w-3.5" />} label="Work" onClick={() => setActiveTab('work')} />
+              <WidgetTabButton active={activeTab === 'logs'} icon={<ListChecks className="h-3.5 w-3.5" />} label="Logs" onClick={() => setActiveTab('logs')} />
+            </div>
+
+            {activeTab === 'overview' && (
+              <OverviewPanel
+                daySummary={daySummary}
+                entries={recentEntries}
+                onOpenDashboard={() => handleOpenDashboard('overview')}
+                status={status}
+                timer={timer}
+                weekSummary={weekSummary}
+              />
+            )}
+            {activeTab === 'work' && (
+              <WorkPanel
+                clients={activeClients}
+                currentProjectId={session?.entry.projectId || pendingProjectId}
+                onClientSelect={handleClientSelection}
+                onProjectSelect={handleProjectSelection}
+                projects={activeProjects}
+                selectedClientId={selectedClientId}
+              />
+            )}
+            {activeTab === 'logs' && (
+              <LogsPanel entries={recentEntries} onOpenDashboard={() => handleOpenDashboard('logs')} />
             )}
           </div>
         )}
-      </div>
 
-      {/* Spacer */}
-      <div className="flex-1" />
-
-      {/* Action Buttons */}
-      <div className="flex items-center gap-1.5" style={{ WebkitAppRegion: 'no-drag' } as any}>
-        {status === WorkStatus.OffWork ? (
-          <button onClick={handleClockIn} disabled={isLoading} className="topbar-btn topbar-btn-success">
-            <LogIn className="w-3.5 h-3.5" />
-            <span>Clock In</span>
-          </button>
-        ) : (
-          <>
-            {status === WorkStatus.Working ? (
-              <button onClick={handleStartBreak} disabled={isLoading} className="topbar-btn topbar-btn-warning">
-                <Pause className="w-3.5 h-3.5" />
-                <span>Break</span>
-              </button>
+        {activeMenu && isExpanded && (
+          <div
+            ref={menuRef}
+            className="topbar-menu animate-slide-down"
+            role="menu"
+            style={{
+              left: menuPosition.left,
+              top: menuPosition.top,
+              width: MENU_WIDTHS[activeMenu],
+              maxHeight: menuPosition.maxHeight,
+              WebkitAppRegion: 'no-drag'
+            } as any}
+          >
+            {activeMenu === 'clients' ? (
+              <ClientMenu clients={activeClients} selectedClientId={selectedClientId} onSelect={handleClientSelection} />
             ) : (
-              <button onClick={handleEndBreak} disabled={isLoading} className="topbar-btn topbar-btn-success">
-                <Play className="w-3.5 h-3.5" />
-                <span>Resume</span>
-              </button>
+              <ProjectMenu clients={clients} projects={visibleProjects} currentProjectId={session?.entry.projectId || pendingProjectId} onSelect={handleProjectSelection} />
             )}
-            <button onClick={handleClockOut} disabled={isLoading} className="topbar-btn topbar-btn-danger">
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Out</span>
-            </button>
-          </>
+          </div>
         )}
-
-        <div className="w-px h-5 bg-border mx-0.5" />
-
-        <button onClick={handleOpenDashboard} className="topbar-btn topbar-btn-ghost" title="Open Dashboard">
-          <LayoutDashboard className="w-3.5 h-3.5" />
-          <span>Dashboard</span>
-        </button>
-      </div>
+      </section>
     </div>
   )
+}
+
+function WidgetTabButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className={`widget-tab ${active ? 'widget-tab-active' : ''}`} role="tab" aria-selected={active}>
+      {icon}
+      <span>{label}</span>
+    </button>
+  )
+}
+
+function OverviewPanel({
+  daySummary,
+  entries,
+  onOpenDashboard,
+  status,
+  timer,
+  weekSummary
+}: {
+  daySummary: DaySummary | null
+  entries: TimeEntryWithRelations[]
+  onOpenDashboard: () => void
+  status: WorkStatus
+  timer: string
+  weekSummary: WeekSummary | null
+}) {
+  return (
+    <div className="widget-panel-grid">
+      <section className="widget-session">
+        <div className="widget-session-copy">
+          <span className={`utility-badge ${utilityBadgeClass(status)}`}>
+            <span className={`td-status-dot ${getStatusMeta(status).dotClass}`} />
+            {getStatusMeta(status).label}
+          </span>
+          <div className={`widget-session-timer td-mono ${utilityStatusClass(status)}`}>{timer}</div>
+          <p className="widget-session-caption utility-muted">Today and week context.</p>
+        </div>
+        <button type="button" onClick={onOpenDashboard} className="utility-button">
+          <LayoutDashboard className="h-3.5 w-3.5" />
+          Open
+        </button>
+      </section>
+
+      <div className="widget-metrics">
+        <MetricCard icon={<Clock className="h-4 w-4" />} label="Today" value={daySummary ? formatDuration(daySummary.netMinutes) : '0m'} detail={`${daySummary?.entryCount || 0} entries`} />
+        <MetricCard icon={<TimerReset className="h-4 w-4" />} label="Week" value={weekSummary ? formatDuration(weekSummary.netMinutes) : '0m'} detail={`${weekSummary?.entryCount || 0} entries`} />
+        <MetricCard icon={<Coffee className="h-4 w-4" />} label="Breaks" value={weekSummary ? formatDuration(weekSummary.breakMinutes) : '0m'} detail="This week" />
+      </div>
+
+      <section className="widget-section">
+        <SectionHeader title="Recent Work" actionLabel="Open Logs" onAction={onOpenDashboard} />
+        <EntryList entries={entries} compact />
+      </section>
+    </div>
+  )
+}
+
+function WorkPanel({
+  clients,
+  currentProjectId,
+  onClientSelect,
+  onProjectSelect,
+  projects,
+  selectedClientId
+}: {
+  clients: Client[]
+  currentProjectId?: string | null
+  onClientSelect: (clientId: string) => void
+  onProjectSelect: (project: Project) => void
+  projects: Project[]
+  selectedClientId: string
+}) {
+  const visibleProjects = selectedClientId ? projects.filter(project => project.clientId === selectedClientId) : projects
+
+  return (
+    <div className="widget-work-grid">
+      <section className="widget-section">
+        <SectionHeader title="Clients" />
+        <div className="widget-list">
+          <button type="button" onClick={() => onClientSelect('')} className={`widget-list-row ${!selectedClientId ? 'widget-list-row-active' : ''}`}>
+            <span>All clients</span>
+            {!selectedClientId && <Check className="h-3.5 w-3.5" />}
+          </button>
+          {clients.map(client => (
+            <button key={client.id} type="button" onClick={() => onClientSelect(client.id)} className={`widget-list-row ${selectedClientId === client.id ? 'widget-list-row-active' : ''}`}>
+              <span className="min-w-0">
+                <span className="block truncate">{client.name}</span>
+                {client.code && <span className="block truncate text-[10px] utility-muted">{client.code}</span>}
+              </span>
+              {selectedClientId === client.id && <Check className="h-3.5 w-3.5 shrink-0" />}
+            </button>
+          ))}
+          {clients.length === 0 && <div className="utility-empty">No active clients</div>}
+        </div>
+      </section>
+
+      <section className="widget-section">
+        <SectionHeader title="Projects" />
+        <div className="widget-list">
+          {visibleProjects.map(project => (
+            <button key={project.id} type="button" onClick={() => onProjectSelect(project)} className={`widget-list-row ${currentProjectId === project.id ? 'widget-list-row-active' : ''}`}>
+              <span className="min-w-0">
+                <span className="block truncate">{project.name}</span>
+                <span className="block truncate text-[10px] utility-muted">{project.code || 'No project code'}</span>
+              </span>
+              {currentProjectId === project.id && <Check className="h-3.5 w-3.5 shrink-0" />}
+            </button>
+          ))}
+          {visibleProjects.length === 0 && <div className="utility-empty">No active projects for this client</div>}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function LogsPanel({ entries, onOpenDashboard }: { entries: TimeEntryWithRelations[]; onOpenDashboard: () => void }) {
+  return (
+    <section className="widget-section widget-section-fill">
+      <SectionHeader title="Recent Time Logs" actionLabel="Open Logs" onAction={onOpenDashboard} />
+      <EntryList entries={entries} />
+    </section>
+  )
+}
+
+function MetricCard({ detail, icon, label, value }: { detail: string; icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="widget-metric">
+      <div className="flex items-center justify-between gap-3">
+        <span className="utility-muted">{icon}</span>
+        <span className="text-[10px] font-bold uppercase utility-muted">{label}</span>
+      </div>
+      <div className="mt-2 text-base font-bold utility-title">{value}</div>
+      <div className="mt-1 text-[10px] utility-muted">{detail}</div>
+    </div>
+  )
+}
+
+function SectionHeader({ actionLabel, onAction, title }: { actionLabel?: string; onAction?: () => void; title: string }) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h3 className="text-[10px] font-bold uppercase utility-muted">{title}</h3>
+      {actionLabel && onAction && (
+        <button type="button" onClick={onAction} className="text-[10px] font-bold text-[color:var(--td-u-accent)]">
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function EntryList({ entries, compact = false }: { entries: TimeEntryWithRelations[]; compact?: boolean }) {
+  if (entries.length === 0) return <div className="utility-empty">No entries today</div>
+
+  return (
+    <div className={`widget-entry-list ${compact ? 'space-y-1.5' : 'space-y-2'}`}>
+      {entries.map(entry => (
+        <div key={entry.id} className="widget-entry-row">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold utility-title">{entry.project?.name || 'No project'}</div>
+            <div className="mt-0.5 truncate text-[10px] utility-muted">
+              {formatEntryWindow(entry)}
+              {entry.client?.name ? ` / ${entry.client.name}` : ''}
+            </div>
+          </div>
+          <div className="td-mono shrink-0 text-right text-xs utility-secondary">
+            {entry.endedAt ? formatDuration(getEntryNetMinutes(entry)) : 'Active'}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ClientMenu({ clients, selectedClientId, onSelect }: { clients: Client[]; selectedClientId: string; onSelect: (clientId: string) => void }) {
+  return (
+    <div className="space-y-1">
+      <div className="px-2 pb-1 text-[10px] font-bold uppercase utility-muted">Clients</div>
+      <button type="button" onClick={() => onSelect('')} className={`topbar-menu-row ${!selectedClientId ? 'topbar-menu-row-active' : ''}`} role="menuitem" aria-selected={!selectedClientId}>
+        <span className="truncate">All clients</span>
+        {!selectedClientId && <Check className="h-3.5 w-3.5 text-[color:var(--td-u-accent)]" />}
+      </button>
+      {clients.map(client => (
+        <button key={client.id} type="button" onClick={() => onSelect(client.id)} className={`topbar-menu-row ${selectedClientId === client.id ? 'topbar-menu-row-active' : ''}`} role="menuitem" aria-selected={selectedClientId === client.id}>
+          <span className="min-w-0">
+            <span className="block truncate">{client.name}</span>
+            {client.code && <span className="block truncate text-[10px] utility-muted">{client.code}</span>}
+          </span>
+          {selectedClientId === client.id && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--td-u-accent)]" />}
+        </button>
+      ))}
+      {clients.length === 0 && <div className="utility-empty">No active clients</div>}
+    </div>
+  )
+}
+
+function ProjectMenu({
+  clients,
+  projects,
+  currentProjectId,
+  onSelect
+}: {
+  clients: Client[]
+  projects: Project[]
+  currentProjectId?: string | null
+  onSelect: (project: Project) => void
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="px-2 pb-1 text-[10px] font-bold uppercase utility-muted">Projects</div>
+      {projects.map(project => {
+        const client = getProjectClient(project, clients)
+        const current = currentProjectId === project.id
+        return (
+          <button key={project.id} type="button" onClick={() => onSelect(project)} className={`topbar-menu-row ${current ? 'topbar-menu-row-active' : ''}`} role="menuitem" aria-selected={current}>
+            <span className="min-w-0">
+              <span className="block truncate">{project.name}</span>
+              <span className="block truncate text-[10px] utility-muted">{[client?.name, project.code].filter(Boolean).join(' / ') || 'Uncoded project'}</span>
+            </span>
+            {current && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--td-u-accent)]" />}
+          </button>
+        )
+      })}
+      {projects.length === 0 && <div className="utility-empty">No active projects for this client</div>}
+    </div>
+  )
+}
+
+function utilityStatusClass(status: WorkStatus): string {
+  if (status === WorkStatus.Working) return 'utility-status-working'
+  if (status === WorkStatus.OnBreak) return 'utility-status-break'
+  return 'utility-status-off'
+}
+
+function utilityBadgeClass(status: WorkStatus): string {
+  if (status === WorkStatus.Working) return 'utility-badge-working'
+  if (status === WorkStatus.OnBreak) return 'utility-badge-break'
+  return 'utility-badge-off'
 }

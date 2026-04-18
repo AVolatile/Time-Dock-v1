@@ -18,6 +18,15 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    document.documentElement.dataset.surface = route
+    document.body.dataset.surface = route
+    return () => {
+      delete document.documentElement.dataset.surface
+      delete document.body.dataset.surface
+    }
+  }, [route])
+
   return (
     <>
       {route === 'topbar' && <TopbarWidget />}

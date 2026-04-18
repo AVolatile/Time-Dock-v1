@@ -1,11 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Building2, Edit3, FolderOpen, Plus, Trash2, Users } from 'lucide-react'
+import type { Client } from '@shared/types'
 import { useAppStore } from '../../store'
 import { toast, useToastStore } from '../../components/toast/toastStore'
-import type { Client } from '@shared/types'
 import {
-  Plus, Edit3, Trash2, X, Users,
-  ToggleLeft, ToggleRight, FolderOpen
-} from 'lucide-react'
+  Button,
+  Dialog,
+  EmptyState,
+  Field,
+  IconButton,
+  PageHeader,
+  Panel,
+  Pill,
+  SwitchControl,
+  TextInput
+} from '../../components/ui'
 
 export default function ClientsPage() {
   const { clients, projects, loadClients, loadProjects } = useAppStore()
@@ -17,95 +26,133 @@ export default function ClientsPage() {
     loadProjects()
   }, [])
 
+  const activeClients = clients.filter(client => client.active).length
+  const projectCountByClient = useMemo(() => {
+    return clients.reduce<Record<string, number>>((acc, client) => {
+      acc[client.id] = projects.filter(project => project.clientId === client.id).length
+      return acc
+    }, {})
+  }, [clients, projects])
+
   const handleDelete = async (id: string) => {
     const { showConfirm } = useToastStore.getState()
     await showConfirm({
-      title: 'Delete Client',
-      message: 'Are you sure you want to delete this client? This cannot be undone.',
+      title: 'Delete client',
+      message: 'This removes the client from local management views. Existing projects may prevent deletion.',
       confirmLabel: 'Delete',
       variant: 'danger',
       onConfirm: async () => {
         try {
           await window.api.deleteClient(id)
-          loadClients()
+          await loadClients()
           toast.success('Client deleted')
-        } catch (e: any) {
-          toast.error('Failed to delete client', e.message || 'It might have active projects.')
+        } catch (error: any) {
+          toast.error('Failed to delete client', error.message || 'The client may have linked projects.')
         }
       }
     })
   }
 
   const handleToggleActive = async (client: Client) => {
-    await window.api.updateClient({ id: client.id, active: !client.active })
-    loadClients()
+    try {
+      await window.api.updateClient({ id: client.id, active: !client.active })
+      await loadClients()
+    } catch (error: any) {
+      toast.error('Client update failed', error.message)
+    }
   }
 
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary">Clients</h1>
-          <p className="text-sm text-text-secondary mt-1">{clients.length} clients</p>
-        </div>
-        <button onClick={() => setIsCreating(true)} className="btn btn-primary gap-2">
-          <Plus className="w-4 h-4" />
-          New Client
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Directory"
+        title="Clients"
+        description="Keep client identities, short codes, and active status clean so projects and exports scan properly."
+        meta={
+          <div className="flex flex-wrap gap-2">
+            <Pill tone="neutral">{clients.length} clients</Pill>
+            <Pill tone="success">{activeClients} active</Pill>
+            <Pill tone="accent">{projects.length} projects linked</Pill>
+          </div>
+        }
+        actions={
+          <Button onClick={() => setIsCreating(true)} variant="primary">
+            <Plus className="h-4 w-4" />
+            New Client
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {clients.map(client => {
-          const clientProjects = projects.filter(p => p.clientId === client.id)
-          return (
-            <div key={client.id} className={`card-hover ${!client.active ? 'opacity-50' : ''}`}>
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center">
-                    <Users className="w-4 h-4 text-accent" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-text-primary">{client.name}</div>
-                    {client.code && <div className="text-2xs text-text-tertiary font-mono">{client.code}</div>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-0.5">
-                  <button onClick={() => setEditing(client)} className="btn btn-ghost btn-icon" title="Edit">
-                    <Edit3 className="w-3 h-3" />
-                  </button>
-                  <button onClick={() => handleDelete(client.id)} className="btn btn-ghost btn-icon text-danger" title="Delete">
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 text-xs text-text-secondary mb-3">
-                <FolderOpen className="w-3 h-3" />
-                {clientProjects.length} project{clientProjects.length !== 1 ? 's' : ''}
-              </div>
-
-              {clientProjects.length > 0 && (
-                <div className="space-y-1 mb-3">
-                  {clientProjects.slice(0, 3).map(p => (
-                    <div key={p.id} className="text-xs text-text-tertiary flex items-center gap-1.5 pl-1">
-                      <div className="w-1 h-1 rounded-full bg-text-tertiary" />
-                      {p.name}
+      {clients.length === 0 ? (
+        <EmptyState
+          icon={<Users className="h-7 w-7" />}
+          title="No clients yet"
+          description="Create a client before adding projects so TimeDock can keep reporting and switching tidy."
+          action={<Button onClick={() => setIsCreating(true)} variant="primary"><Plus className="h-4 w-4" /> New Client</Button>}
+        />
+      ) : (
+        <div className="td-grid-3">
+          {clients.map(client => {
+            const clientProjects = projects.filter(project => project.clientId === client.id)
+            return (
+              <Panel key={client.id} interactive className={`p-4 ${!client.active ? 'opacity-60' : ''}`}>
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[color:var(--td-accent-soft)] text-[color:var(--td-accent)]">
+                      <Building2 className="h-4 w-4" />
                     </div>
-                  ))}
-                  {clientProjects.length > 3 && (
-                    <div className="text-2xs text-text-tertiary pl-1">+{clientProjects.length - 3} more</div>
-                  )}
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-[color:var(--td-text)]">{client.name}</div>
+                      <div className="mt-1 flex gap-2">
+                        {client.code && <Pill tone="neutral">{client.code}</Pill>}
+                        <Pill tone={client.active ? 'success' : 'neutral'}>{client.active ? 'Active' : 'Inactive'}</Pill>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <IconButton onClick={() => setEditing(client)} aria-label="Edit client">
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </IconButton>
+                    <IconButton onClick={() => handleDelete(client.id)} tone="danger" aria-label="Delete client">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </IconButton>
+                  </div>
                 </div>
-              )}
 
-              <button onClick={() => handleToggleActive(client)} className="flex items-center gap-1 text-2xs text-text-tertiary hover:text-text-primary transition-colors">
-                {client.active ? <ToggleRight className="w-3.5 h-3.5 text-success" /> : <ToggleLeft className="w-3.5 h-3.5" />}
-                {client.active ? 'Active' : 'Inactive'}
-              </button>
-            </div>
-          )
-        })}
-      </div>
+                <div className="mb-3 flex items-center gap-2 text-xs text-[color:var(--td-text-secondary)]">
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  {projectCountByClient[client.id] || 0} linked project{projectCountByClient[client.id] === 1 ? '' : 's'}
+                </div>
+
+                {clientProjects.length > 0 ? (
+                  <div className="mb-4 space-y-1">
+                    {clientProjects.slice(0, 4).map(project => (
+                      <div key={project.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-[color:var(--td-fill-hover)]">
+                        <span className="truncate text-[color:var(--td-text)]">{project.name}</span>
+                        {project.code && <span className="td-mono text-[10px] text-[color:var(--td-text-tertiary)]">{project.code}</span>}
+                      </div>
+                    ))}
+                    {clientProjects.length > 4 && (
+                      <div className="px-2 text-[11px] text-[color:var(--td-text-tertiary)]">+{clientProjects.length - 4} more</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mb-4 rounded-md border border-dashed border-[color:var(--td-line)] p-3 text-xs text-[color:var(--td-text-tertiary)]">
+                    No projects assigned yet.
+                  </div>
+                )}
+
+                <SwitchControl
+                  checked={client.active}
+                  onChange={() => handleToggleActive(client)}
+                  label="Available for new work"
+                  description="Inactive clients stay in history but drop out of fast selection."
+                />
+              </Panel>
+            )
+          })}
+        </div>
+      )}
 
       {(editing || isCreating) && (
         <ClientModal
@@ -118,54 +165,65 @@ export default function ClientsPage() {
 }
 
 function ClientModal({ client, onClose }: { client?: Client; onClose: () => void }) {
-  const isEdit = !!client
+  const isEdit = Boolean(client)
   const [name, setName] = useState(client?.name || '')
   const [code, setCode] = useState(client?.code || '')
+  const [active, setActive] = useState(client?.active ?? true)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   const handleSave = async () => {
-    if (!name) return
+    if (!name.trim()) {
+      setError('Client name is required.')
+      return
+    }
     setSaving(true)
     try {
       if (isEdit) {
-        await window.api.updateClient({ id: client!.id, name, code })
-        toast.success('Client updated', `${name} has been saved.`)
+        await window.api.updateClient({ id: client!.id, name: name.trim(), code: code.trim(), active })
+        toast.success('Client updated', `${name.trim()} has been saved.`)
       } else {
-        await window.api.createClient({ name, code })
-        toast.success('Client created', `${name} has been added.`)
+        await window.api.createClient({ name: name.trim(), code: code.trim(), active })
+        toast.success('Client created', `${name.trim()} has been added.`)
       }
       onClose()
-    } catch (e: any) {
-      toast.error('Save failed', e.message || 'Something went wrong.')
+    } catch (err: any) {
+      toast.error('Save failed', err.message || 'The client could not be saved.')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-fade-in" onClick={onClose}>
-      <div className="bg-surface-2 border border-border rounded-xl w-full max-w-md p-6 shadow-popup animate-slide-up" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold">{isEdit ? 'Edit Client' : 'New Client'}</h2>
-          <button onClick={onClose} className="btn btn-ghost btn-icon"><X className="w-4 h-4" /></button>
-        </div>
-        <div className="space-y-4">
-          <div>
-            <label className="label">Client Name</label>
-            <input value={name} onChange={e => setName(e.target.value)} className="input" placeholder="e.g. FirmGuide" />
-          </div>
-          <div>
-            <label className="label">Short Code</label>
-            <input value={code} onChange={e => setCode(e.target.value)} className="input" placeholder="e.g. FG" />
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-border">
-          <button onClick={onClose} className="btn btn-ghost">Cancel</button>
-          <button onClick={handleSave} disabled={saving || !name} className="btn btn-primary">
-            {saving ? 'Saving...' : isEdit ? 'Save' : 'Create'}
-          </button>
-        </div>
+    <Dialog
+      title={isEdit ? 'Edit Client' : 'New Client'}
+      description="Client names and codes appear in selectors, exports, and log tables."
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose} variant="ghost">Cancel</Button>
+          <Button onClick={handleSave} disabled={saving} variant="primary">
+            {saving ? 'Saving...' : isEdit ? 'Save Client' : 'Create Client'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Client Name" error={error}>
+          <TextInput autoFocus value={name} onChange={event => { setName(event.target.value); setError('') }} placeholder="Northstar Studio" />
+        </Field>
+        <Field label="Short Code" hint="Optional two-to-eight character code for compact surfaces.">
+          <TextInput value={code} onChange={event => setCode(event.target.value.toUpperCase())} placeholder="NS" />
+        </Field>
+        <Panel className="p-3">
+          <SwitchControl
+            checked={active}
+            onChange={setActive}
+            label="Active client"
+            description="Active clients appear in topbar and tray project selection."
+          />
+        </Panel>
       </div>
-    </div>
+    </Dialog>
   )
 }

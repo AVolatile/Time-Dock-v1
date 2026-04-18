@@ -70,9 +70,6 @@ export const useToastStore = create<ToastStore>((set, get) => ({
               confirmResolve = null
               set({ confirm: null })
             } catch (err: any) {
-              // If onConfirm fails, we don't resolve yet or we resolve false?
-              // Actually, we stay open so the user can see if we show a toast
-              // But for now, let's just allow it to be caught by the caller
               console.error('onConfirm failed:', err)
             }
           },

@@ -1,210 +1,217 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Briefcase, Check, Clock, Coffee, LayoutDashboard, Search, TimerReset } from 'lucide-react'
+import { WorkStatus, type Project } from '@shared/types'
 import { useAppStore } from '../store'
 import { toast } from '../components/toast/toastStore'
-import { formatTimerDisplay } from '@shared/utils'
-import { WorkStatus } from '@shared/types'
-import {
-  Clock, Coffee, LogOut, LogIn, Play, Pause,
-  LayoutDashboard, ChevronDown, Briefcase
-} from 'lucide-react'
+import { UtilitySessionActions } from '../components/time/UtilitySessionActions'
+import { useLiveSessionTimer } from '../hooks/useLiveSessionTimer'
+import { getProjectClient, getStatusMeta } from '../lib/viewUtils'
 
 export default function TrayWidget() {
-  const { session, isLoading, clients, projects, refreshSession, clockIn, clockOut, startBreak, endBreak, loadClients, loadProjects } = useAppStore()
+  const {
+    session,
+    isLoading,
+    clients,
+    projects,
+    refreshSession,
+    clockIn,
+    clockOut,
+    startBreak,
+    endBreak,
+    switchProject,
+    loadClients,
+    loadProjects
+  } = useAppStore()
+  const { status, timer, breakTimer } = useLiveSessionTimer(session)
+  const statusMeta = getStatusMeta(status)
+  const [query, setQuery] = useState('')
 
-  const [elapsed, setElapsed] = useState(0)
-  const [breakElapsed, setBreakElapsed] = useState(0)
-  const [showProjectPicker, setShowProjectPicker] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setInterval>>()
-
-  // Load initial data
   useEffect(() => {
     refreshSession()
     loadClients()
     loadProjects()
   }, [])
 
-  // Timer tick
-  useEffect(() => {
-    if (session) {
-      setElapsed(session.elapsedSeconds)
-      setBreakElapsed(session.breakElapsedSeconds)
-
-      timerRef.current = setInterval(() => {
-        if (session.status === WorkStatus.Working) {
-          setElapsed(prev => prev + 1)
-        } else if (session.status === WorkStatus.OnBreak) {
-          setBreakElapsed(prev => prev + 1)
-        }
-      }, 1000)
-    } else {
-      setElapsed(0)
-      setBreakElapsed(0)
-    }
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [session])
-
-  const status = session?.status ?? WorkStatus.OffWork
-  const statusLabel = status === WorkStatus.Working ? 'Working' : status === WorkStatus.OnBreak ? 'On Break' : 'Off Work'
-  const statusColor = status === WorkStatus.Working ? 'text-status-working' : status === WorkStatus.OnBreak ? 'text-status-break' : 'text-status-off'
-  const statusBgColor = status === WorkStatus.Working ? 'bg-status-working-bg' : status === WorkStatus.OnBreak ? 'bg-status-break-bg' : 'bg-status-off-bg'
+  const activeProjects = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    return projects
+      .filter(project => project.active)
+      .filter(project => {
+        if (!normalized) return true
+        const client = getProjectClient(project, clients)
+        return `${project.name} ${project.code} ${client?.name || ''} ${client?.code || ''}`.toLowerCase().includes(normalized)
+      })
+      .slice(0, 8)
+  }, [clients, projects, query])
 
   const handleClockIn = async () => {
-    try { await clockIn(); toast.success('Clocked in') } catch (e: any) { toast.error('Clock in failed', e.message) }
+    try {
+      await clockIn()
+      toast.success('Clocked in')
+    } catch (error: any) {
+      toast.error('Clock in failed', error.message)
+    }
   }
+
   const handleClockOut = async () => {
-    try { await clockOut(); toast.success('Clocked out') } catch (e: any) { toast.error('Clock out failed', e.message) }
+    try {
+      await clockOut()
+      toast.success('Clocked out')
+    } catch (error: any) {
+      toast.error('Clock out failed', error.message)
+    }
   }
+
   const handleStartBreak = async () => {
-    try { await startBreak(); toast.info('Break started') } catch (e: any) { toast.error('Break failed', e.message) }
+    try {
+      await startBreak()
+      toast.info('Break started')
+    } catch (error: any) {
+      toast.error('Break failed', error.message)
+    }
   }
+
   const handleEndBreak = async () => {
-    try { await endBreak(); toast.success('Break ended') } catch (e: any) { toast.error('Resume failed', e.message) }
+    try {
+      await endBreak()
+      toast.success('Break ended')
+    } catch (error: any) {
+      toast.error('Resume failed', error.message)
+    }
   }
+
+  const handleProjectSelect = async (project: Project) => {
+    try {
+      if (status === WorkStatus.OffWork) {
+        await clockIn({ projectId: project.id, clientId: project.clientId, billable: project.billableDefault })
+        toast.success(`Clocked in to ${project.name}`)
+      } else if (session?.entry.projectId !== project.id) {
+        await switchProject(project.id, undefined, project.clientId)
+        toast.success('Project switched', project.name)
+      }
+    } catch (error: any) {
+      toast.error('Project action failed', error.message)
+    }
+  }
+
   const handleOpenDashboard = async () => {
-    await window.api.openDashboard()
-    await window.api.closeTrayPopup()
+    try {
+      await window.api.openDashboard()
+      await window.api.closeTrayPopup()
+    } catch (error: any) {
+      toast.error('Dashboard failed to open', error.message)
+    }
   }
 
   return (
-    <div className="tray-window h-full flex flex-col select-none">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-3">
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-accent" />
-          <span className="text-sm font-semibold text-text-primary">TimeDock</span>
+    <div className="tray-window td-utility select-none">
+      <header className="utility-header">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md border border-[color:var(--td-u-line)] bg-[rgba(255,255,255,0.08)] text-[color:var(--td-u-accent)]">
+          <TimerReset className="h-4 w-4" />
         </div>
-        <button
-          onClick={handleOpenDashboard}
-          className="btn btn-ghost btn-sm gap-1.5"
-          title="Open Dashboard"
-        >
-          <LayoutDashboard className="w-3.5 h-3.5" />
-          <span>Dashboard</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-bold utility-title">TimeDock</div>
+          <div className="text-[11px] utility-muted">Quick control panel</div>
+        </div>
+        <button type="button" onClick={handleOpenDashboard} className="utility-button" title="Open dashboard">
+          <LayoutDashboard className="h-3.5 w-3.5" />
+          Dashboard
         </button>
-      </div>
+      </header>
 
-      <div className="divider mx-4" />
-
-      {/* Status Section */}
-      <div className="px-4 py-4">
-        <div className="flex items-center gap-3 mb-4">
-          <div className={`w-2.5 h-2.5 rounded-full ${statusColor.replace('text-', 'bg-')} ${status === WorkStatus.Working ? 'animate-timer-pulse' : ''}`} />
-          <div className={`badge ${status === WorkStatus.Working ? 'badge-working' : status === WorkStatus.OnBreak ? 'badge-break' : 'badge-off'}`}>
-            {statusLabel}
+      <main className="min-h-0 flex-1 overflow-auto p-3">
+        <section className="utility-panel p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <span className={`utility-badge ${utilityBadgeClass(status)}`}>
+              <span className={`td-status-dot ${statusMeta.dotClass}`} />
+              {statusMeta.label}
+            </span>
+            <span className="text-[11px] utility-muted">{session?.entry.billable ? 'Billable' : 'Non-billable'}</span>
           </div>
-        </div>
 
-        {/* Timer */}
-        <div className="mb-4">
-          <div className={`font-mono text-3xl font-bold tracking-tight ${statusColor}`}>
-            {formatTimerDisplay(elapsed)}
+          <div className={`td-mono text-[38px] font-bold leading-none ${utilityStatusClass(status)}`}>
+            {session ? timer : '00:00:00'}
           </div>
           {status === WorkStatus.OnBreak && (
-            <div className="font-mono text-sm text-status-break mt-1 flex items-center gap-1.5">
-              <Coffee className="w-3 h-3" />
-              Break: {formatTimerDisplay(breakElapsed)}
+            <div className="mt-2 flex items-center gap-2 text-xs utility-status-break">
+              <Coffee className="h-3.5 w-3.5" />
+              Break <span className="td-mono font-bold">{breakTimer}</span>
             </div>
           )}
-        </div>
 
-        {/* Current Project */}
-        {session && (
-          <div className="mb-4">
-            <div className="text-2xs uppercase tracking-wider text-text-tertiary mb-1">Current Project</div>
-            <button
-              onClick={() => setShowProjectPicker(!showProjectPicker)}
-              className="flex items-center gap-2 text-sm text-text-primary hover:text-accent transition-colors"
-            >
-              <Briefcase className="w-3.5 h-3.5 text-text-tertiary" />
-              <span>{session.entry.project?.name || 'No project'}</span>
-              {session.entry.client && (
-                <span className="text-text-tertiary">· {session.entry.client.name}</span>
-              )}
-              <ChevronDown className="w-3 h-3 text-text-tertiary" />
-            </button>
+          <div className="mt-4 rounded-md border border-[color:var(--td-u-line)] bg-[rgba(0,0,0,0.12)] p-3">
+            <div className="mb-1 text-[10px] font-bold uppercase utility-muted">Current Work</div>
+            <div className="truncate text-sm font-semibold utility-title">{session?.entry.project?.name || 'No project selected'}</div>
+            <div className="mt-1 truncate text-[11px] utility-muted">
+              {session?.entry.client?.name || 'Unassigned client'}
+              {session?.entry.task?.name ? ` / ${session.entry.task.name}` : ''}
+            </div>
           </div>
-        )}
+        </section>
 
-        {/* Project Picker */}
-        {showProjectPicker && (
-          <div className="mb-4 bg-surface-0 border border-border rounded-lg p-2 max-h-40 overflow-y-auto animate-slide-down">
-            {projects.filter(p => p.active).map(project => {
-              const client = clients.find(c => c.id === project.clientId)
+        <section className="mt-3 utility-panel p-3">
+          <div className="mb-3 flex items-center gap-2">
+            <Briefcase className="h-3.5 w-3.5 text-[color:var(--td-u-accent)]" />
+            <span className="text-xs font-bold utility-title">Project Switcher</span>
+          </div>
+          <div className="relative mb-3">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 utility-muted" />
+            <input
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="Filter active projects..."
+              className="utility-input w-full pl-9"
+            />
+          </div>
+          <div className="max-h-[210px] space-y-1 overflow-auto">
+            {activeProjects.map(project => {
+              const client = getProjectClient(project, clients)
+              const current = session?.entry.projectId === project.id
               return (
                 <button
                   key={project.id}
-                  onClick={async () => {
-                    await useAppStore.getState().switchProject(project.id, undefined, project.clientId)
-                    setShowProjectPicker(false)
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded text-sm text-text-secondary hover:bg-surface-3 hover:text-text-primary transition-colors flex items-center justify-between"
+                  type="button"
+                  onClick={() => handleProjectSelect(project)}
+                  className={`utility-list-row ${current ? 'utility-list-row-active' : ''}`}
                 >
-                  <span>{project.name}</span>
-                  {client && <span className="text-2xs text-text-tertiary">{client.code}</span>}
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{project.name}</span>
+                    <span className="block truncate text-[10px] utility-muted">
+                      {[client?.name, project.code].filter(Boolean).join(' / ') || 'Uncoded project'}
+                    </span>
+                  </span>
+                  {current && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--td-u-accent)]" />}
                 </button>
               )
             })}
+            {activeProjects.length === 0 && <div className="utility-empty">No active projects match this filter</div>}
           </div>
-        )}
+        </section>
+      </main>
 
-        {/* Note */}
-        {session?.entry.note && (
-          <div className="text-xs text-text-tertiary italic mb-4 line-clamp-2">
-            "{session.entry.note}"
-          </div>
-        )}
-      </div>
-
-      <div className="divider mx-4" />
-
-      {/* Actions */}
-      <div className="px-4 py-4 mt-auto">
-        {status === WorkStatus.OffWork ? (
-          <button
-            onClick={handleClockIn}
-            disabled={isLoading}
-            className="btn btn-success w-full justify-center gap-2 py-2.5"
-          >
-            <LogIn className="w-4 h-4" />
-            Clock In
-          </button>
-        ) : (
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              {status === WorkStatus.Working ? (
-                <button
-                  onClick={handleStartBreak}
-                  disabled={isLoading}
-                  className="btn btn-warning justify-center gap-1.5"
-                >
-                  <Pause className="w-3.5 h-3.5" />
-                  Break
-                </button>
-              ) : (
-                <button
-                  onClick={handleEndBreak}
-                  disabled={isLoading}
-                  className="btn btn-success justify-center gap-1.5"
-                >
-                  <Play className="w-3.5 h-3.5" />
-                  Resume
-                </button>
-              )}
-              <button
-                onClick={handleClockOut}
-                disabled={isLoading}
-                className="btn btn-danger justify-center gap-1.5"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                Clock Out
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <footer className="border-t border-[color:var(--td-u-line)] p-3">
+        <UtilitySessionActions
+          fullWidth
+          status={status}
+          isLoading={isLoading}
+          onClockIn={handleClockIn}
+          onClockOut={handleClockOut}
+          onStartBreak={handleStartBreak}
+          onEndBreak={handleEndBreak}
+        />
+      </footer>
     </div>
   )
+}
+
+function utilityStatusClass(status: WorkStatus): string {
+  if (status === WorkStatus.Working) return 'utility-status-working'
+  if (status === WorkStatus.OnBreak) return 'utility-status-break'
+  return 'utility-status-off'
+}
+
+function utilityBadgeClass(status: WorkStatus): string {
+  if (status === WorkStatus.Working) return 'utility-badge-working'
+  if (status === WorkStatus.OnBreak) return 'utility-badge-break'
+  return 'utility-badge-off'
 }

@@ -210,6 +210,9 @@ export const IPC_CHANNELS = {
   // Windows
   OPEN_DASHBOARD: 'window:open-dashboard',
   CLOSE_TRAY_POPUP: 'window:close-tray-popup',
+  SET_TOPBAR_MENU_OPEN: 'window:set-topbar-menu-open',
+  SET_TOPBAR_MINIMIZED: 'window:set-topbar-minimized',
+  SET_TOPBAR_EXPANDED: 'window:set-topbar-expanded',
 
   // App
   GET_APP_INFO: 'app:info'

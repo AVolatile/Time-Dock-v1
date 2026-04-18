@@ -10,6 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "./out/main",
+    "baseUrl": ".",
     "paths": {
       "@shared/*": ["src/shared/*"]
     }

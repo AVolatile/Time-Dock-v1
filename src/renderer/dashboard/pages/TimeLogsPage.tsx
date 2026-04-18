@@ -1,25 +1,71 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  DollarSign,
+  Edit3,
+  FileText,
+  Filter,
+  Plus,
+  Search,
+  Trash2
+} from 'lucide-react'
+import { formatDurationHHMM } from '@shared/utils'
+import type { CreateEntryPayload, TimeEntryWithRelations, UpdateEntryPayload } from '@shared/types'
 import { useAppStore } from '../../store'
 import { toast, useToastStore } from '../../components/toast/toastStore'
-import { formatDuration, formatDurationHHMM } from '@shared/utils'
-import type { TimeEntryWithRelations, CreateEntryPayload, UpdateEntryPayload } from '@shared/types'
 import {
-  Search, Filter, Plus, Edit3, Trash2, X,
-  ChevronUp, ChevronDown, Calendar, DollarSign
-} from 'lucide-react'
+  Button,
+  Dialog,
+  EmptyState,
+  Field,
+  IconButton,
+  PageHeader,
+  Panel,
+  Pill,
+  SelectInput,
+  SwitchControl,
+  TableShell,
+  TextArea,
+  TextInput,
+  Toolbar
+} from '../../components/ui'
+import {
+  describeEntryContext,
+  formatDate,
+  formatEntryWindow,
+  formatTime,
+  getEntryBreakMinutes,
+  getEntryNetMinutes,
+  toDateTimeLocalValue
+} from '../../lib/viewUtils'
+
+type SortKey = 'startedAt' | 'endedAt' | 'client' | 'project' | 'task' | 'billable' | 'net'
 
 export default function TimeLogsPage() {
-  const { entries, clients, projects, tasks, loadEntries, loadClients, loadProjects, loadTasks, entriesFilter, setEntriesFilter } = useAppStore()
+  const {
+    entries,
+    clients,
+    projects,
+    tasks,
+    loadEntries,
+    loadClients,
+    loadProjects,
+    loadTasks,
+    setEntriesFilter
+  } = useAppStore()
   const [searchText, setSearchText] = useState('')
   const [editingEntry, setEditingEntry] = useState<TimeEntryWithRelations | null>(null)
   const [isCreating, setIsCreating] = useState(false)
-  const [sortKey, setSortKey] = useState<string>('startedAt')
+  const [sortKey, setSortKey] = useState<SortKey>('startedAt')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [filterClient, setFilterClient] = useState('')
   const [filterProject, setFilterProject] = useState('')
-  const [filterBillable, setFilterBillable] = useState<string>('')
+  const [filterBillable, setFilterBillable] = useState('')
 
   useEffect(() => {
     loadEntries()
@@ -28,69 +74,75 @@ export default function TimeLogsPage() {
     loadTasks()
   }, [])
 
-  const handleApplyFilters = () => {
-    const filter: any = {}
+  const activeFilterCount = [
+    searchText,
+    startDate,
+    endDate,
+    filterClient,
+    filterProject,
+    filterBillable
+  ].filter(Boolean).length
+
+  const filteredProjects = filterClient ? projects.filter(project => project.clientId === filterClient) : projects
+
+  const sortedEntries = useMemo(() => {
+    return [...entries].sort((a, b) => {
+      const valA = getSortValue(a, sortKey)
+      const valB = getSortValue(b, sortKey)
+      const cmp = valA < valB ? -1 : valA > valB ? 1 : 0
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [entries, sortDir, sortKey])
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(current => (current === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortKey(key)
+    setSortDir('desc')
+  }
+
+  const applyFilters = () => {
+    const filter: Record<string, string | boolean> = {}
     if (startDate) filter.startDate = new Date(startDate).toISOString()
     if (endDate) {
-      const ed = new Date(endDate)
-      ed.setHours(23, 59, 59, 999)
-      filter.endDate = ed.toISOString()
+      const value = new Date(endDate)
+      value.setHours(23, 59, 59, 999)
+      filter.endDate = value.toISOString()
     }
     if (filterClient) filter.clientId = filterClient
     if (filterProject) filter.projectId = filterProject
     if (filterBillable === 'true') filter.billable = true
     if (filterBillable === 'false') filter.billable = false
-    if (searchText) filter.search = searchText
+    if (searchText.trim()) filter.search = searchText.trim()
     setEntriesFilter(filter)
   }
 
-  const handleClearFilters = () => {
+  const clearFilters = () => {
+    setSearchText('')
     setStartDate('')
     setEndDate('')
     setFilterClient('')
     setFilterProject('')
     setFilterBillable('')
-    setSearchText('')
     setEntriesFilter({})
-  }
-
-  const sortedEntries = useMemo(() => {
-    return [...entries].sort((a: any, b: any) => {
-      const valA = a[sortKey] || ''
-      const valB = b[sortKey] || ''
-      const cmp = valA < valB ? -1 : valA > valB ? 1 : 0
-      return sortDir === 'asc' ? cmp : -cmp
-    })
-  }, [entries, sortKey, sortDir])
-
-  const toggleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortKey(key)
-      setSortDir('desc')
-    }
-  }
-
-  const SortIcon = ({ column }: { column: string }) => {
-    if (sortKey !== column) return null
-    return sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
   }
 
   const handleDelete = async (id: string) => {
     const { showConfirm } = useToastStore.getState()
     await showConfirm({
-      title: 'Delete Entry',
-      message: 'Are you sure you want to delete this time entry?',
+      title: 'Delete time entry',
+      message: 'This removes the time entry and its break records from local history.',
       confirmLabel: 'Delete',
       variant: 'danger',
       onConfirm: async () => {
         try {
           await window.api.deleteEntry(id)
-          loadEntries()
+          await loadEntries()
           toast.success('Entry deleted')
-        } catch (e: any) {
-          toast.error('Failed to delete entry', e.message || 'Something went wrong.')
+        } catch (error: any) {
+          toast.error('Failed to delete entry', error.message || 'The entry could not be removed.')
         }
       }
     })
@@ -98,133 +150,127 @@ export default function TimeLogsPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary">Time Logs</h1>
-          <p className="text-sm text-text-secondary mt-1">{entries.length} entries</p>
-        </div>
-        <button onClick={() => setIsCreating(true)} className="btn btn-primary gap-2">
-          <Plus className="w-4 h-4" />
-          New Entry
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Data Management"
+        title="Time Logs"
+        description="Filter, audit, create, and correct local time entries with desktop table density."
+        meta={<Pill tone="neutral">{entries.length} entries loaded</Pill>}
+        actions={
+          <Button onClick={() => setIsCreating(true)} variant="primary">
+            <Plus className="h-4 w-4" />
+            New Entry
+          </Button>
+        }
+      />
 
-      {/* Filters */}
-      <div className="card mb-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary" />
-            <input
-              type="text"
+      <Panel className="mb-4 p-3">
+        <Toolbar className="border-0 bg-transparent p-0">
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--td-text-tertiary)]" />
+            <TextInput
               value={searchText}
-              onChange={e => setSearchText(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleApplyFilters()}
-              placeholder="Search notes, projects, clients..."
-              className="input pl-9"
+              onChange={event => setSearchText(event.target.value)}
+              onKeyDown={event => event.key === 'Enter' && applyFilters()}
+              placeholder="Search notes, clients, projects..."
+              className="pl-9"
             />
           </div>
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="input w-36" />
-          <span className="text-text-tertiary text-xs">to</span>
-          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="input w-36" />
-          <select value={filterClient} onChange={e => setFilterClient(e.target.value)} className="select w-36">
+          <TextInput type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className="w-36" />
+          <span className="text-xs text-[color:var(--td-text-tertiary)]">to</span>
+          <TextInput type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className="w-36" />
+          <SelectInput value={filterClient} onChange={event => { setFilterClient(event.target.value); setFilterProject('') }} className="w-40">
             <option value="">All clients</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select value={filterProject} onChange={e => setFilterProject(e.target.value)} className="select w-36">
+            {clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
+          </SelectInput>
+          <SelectInput value={filterProject} onChange={event => setFilterProject(event.target.value)} className="w-40">
             <option value="">All projects</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <select value={filterBillable} onChange={e => setFilterBillable(e.target.value)} className="select w-28">
-            <option value="">All</option>
+            {filteredProjects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+          </SelectInput>
+          <SelectInput value={filterBillable} onChange={event => setFilterBillable(event.target.value)} className="w-32">
+            <option value="">All billing</option>
             <option value="true">Billable</option>
             <option value="false">Non-billable</option>
-          </select>
-          <button onClick={handleApplyFilters} className="btn btn-primary btn-sm">
-            <Filter className="w-3.5 h-3.5" />
+          </SelectInput>
+          <Button onClick={applyFilters} size="sm" variant="secondary">
+            <Filter className="h-3.5 w-3.5" />
             Apply
-          </button>
-          <button onClick={handleClearFilters} className="btn btn-ghost btn-sm">Clear</button>
-        </div>
-      </div>
+          </Button>
+          <Button onClick={clearFilters} size="sm" variant="ghost" disabled={activeFilterCount === 0}>
+            Clear
+          </Button>
+        </Toolbar>
+      </Panel>
 
-      {/* Table */}
-      <div className="card overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+      <TableShell>
+        <div className="td-table-wrap">
+          <table className="td-table">
             <thead>
-              <tr className="border-b border-border">
-                {[
-                  { key: 'startedAt', label: 'Date' },
-                  { key: 'startedAt_time', label: 'Start' },
-                  { key: 'endedAt', label: 'End' },
-                  { key: 'break', label: 'Break' },
-                  { key: 'net', label: 'Net Hours' },
-                  { key: 'clientId', label: 'Client' },
-                  { key: 'projectId', label: 'Project' },
-                  { key: 'taskId', label: 'Task' },
-                  { key: 'billable', label: 'Bill' },
-                  { key: 'note', label: 'Notes' },
-                ].map(col => (
-                  <th
-                    key={col.key}
-                    onClick={() => toggleSort(col.key)}
-                    className="table-header text-left px-4 py-3 cursor-pointer hover:text-text-secondary transition-colors"
-                  >
-                    <div className="flex items-center gap-1">
-                      {col.label}
-                      <SortIcon column={col.key} />
-                    </div>
-                  </th>
-                ))}
-                <th className="table-header text-right px-4 py-3">Actions</th>
+              <tr>
+                <SortableTh label="Date" column="startedAt" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Window</th>
+                <SortableTh label="Client" column="client" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Project" column="project" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Task" column="task" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Break</th>
+                <SortableTh label="Net" column="net" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <SortableTh label="Bill" column="billable" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <th>Notes</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {sortedEntries.map(entry => {
-                const breakMins = entry.breaks.reduce((s, b) => s + (b.durationMinutes || 0), 0)
-                const netMins = (entry.durationMinutes || 0) - breakMins
-                return (
-                  <tr key={entry.id} className="border-b border-border-subtle hover:bg-surface-2/50 transition-colors">
-                    <td className="px-4 py-3 text-sm">{entry.startedAt ? new Date(entry.startedAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—'}</td>
-                    <td className="px-4 py-3 text-sm font-mono text-text-secondary">{entry.startedAt ? new Date(entry.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                    <td className="px-4 py-3 text-sm font-mono text-text-secondary">{entry.endedAt ? new Date(entry.endedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : <span className="badge badge-working">Active</span>}</td>
-                    <td className="px-4 py-3 text-sm text-text-tertiary">{breakMins > 0 ? formatDuration(breakMins) : '—'}</td>
-                    <td className="px-4 py-3 text-sm font-mono font-medium">{entry.endedAt ? formatDurationHHMM(netMins) : '—'}</td>
-                    <td className="px-4 py-3 text-sm text-text-secondary">{entry.client?.name || '—'}</td>
-                    <td className="px-4 py-3 text-sm">{entry.project?.name || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-text-secondary">{entry.task?.name || '—'}</td>
-                    <td className="px-4 py-3">
-                      {entry.billable ? (
-                        <DollarSign className="w-3.5 h-3.5 text-success" />
-                      ) : (
-                        <span className="text-text-tertiary text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-text-tertiary max-w-[120px] truncate">{entry.note || '—'}</td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => setEditingEntry(entry)} className="btn btn-ghost btn-icon" title="Edit">
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => handleDelete(entry.id)} className="btn btn-ghost btn-icon text-danger" title="Delete">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
+              {sortedEntries.map(entry => (
+                <tr key={entry.id}>
+                  <td className="whitespace-nowrap">
+                    <div className="font-medium text-[color:var(--td-text)]">{formatDate(entry.startedAt)}</div>
+                    <div className="text-[11px] text-[color:var(--td-text-tertiary)]">{formatTime(entry.startedAt)}</div>
+                  </td>
+                  <td className="td-mono whitespace-nowrap">{formatEntryWindow(entry)}</td>
+                  <td>{entry.client?.name || '-'}</td>
+                  <td>
+                    <div className="font-medium text-[color:var(--td-text)]">{entry.project?.name || '-'}</div>
+                    <div className="text-[11px] text-[color:var(--td-text-tertiary)]">{entry.project?.code || ''}</div>
+                  </td>
+                  <td>{entry.task?.name || '-'}</td>
+                  <td className="text-[color:var(--td-text-tertiary)]">{getEntryBreakMinutes(entry) ? formatDurationHHMM(getEntryBreakMinutes(entry)) : '-'}</td>
+                  <td className="td-mono font-semibold text-[color:var(--td-text)]">
+                    {entry.endedAt ? formatDurationHHMM(getEntryNetMinutes(entry)) : <Pill tone="success">Active</Pill>}
+                  </td>
+                  <td>
+                    {entry.billable ? (
+                      <Pill tone="success"><DollarSign className="h-3 w-3" /> Billable</Pill>
+                    ) : (
+                      <Pill tone="neutral">No</Pill>
+                    )}
+                  </td>
+                  <td className="max-w-[180px] truncate text-[11px]">{entry.note || describeEntryContext(entry)}</td>
+                  <td>
+                    <div className="flex justify-end gap-1">
+                      <IconButton onClick={() => setEditingEntry(entry)} aria-label="Edit entry">
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </IconButton>
+                      <IconButton onClick={() => handleDelete(entry.id)} tone="danger" aria-label="Delete entry">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </IconButton>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        {entries.length === 0 && (
-          <div className="text-center py-12 text-text-tertiary text-sm">
-            No time entries found. Adjust your filters or clock in to start tracking.
+        {sortedEntries.length === 0 && (
+          <div className="p-4">
+            <EmptyState
+              icon={<Clock className="h-6 w-6" />}
+              title="No time entries match this view"
+              description="Clear filters, clock in, or add a manual entry to start building your local log."
+              action={<Button onClick={() => setIsCreating(true)} variant="primary"><Plus className="h-4 w-4" /> New Entry</Button>}
+            />
           </div>
         )}
-      </div>
+      </TableShell>
 
-      {/* Edit Modal */}
       {editingEntry && (
         <EntryModal
           entry={editingEntry}
@@ -232,39 +278,65 @@ export default function TimeLogsPage() {
         />
       )}
 
-      {/* Create Modal */}
       {isCreating && (
-        <EntryModal
-          onClose={() => { setIsCreating(false); loadEntries() }}
-        />
+        <EntryModal onClose={() => { setIsCreating(false); loadEntries() }} />
       )}
     </div>
   )
 }
 
-function EntryModal({
-  entry,
-  onClose
+function SortableTh({
+  label,
+  column,
+  sortKey,
+  sortDir,
+  onSort
 }: {
-  entry?: TimeEntryWithRelations
-  onClose: () => void
+  label: string
+  column: SortKey
+  sortKey: SortKey
+  sortDir: 'asc' | 'desc'
+  onSort: (column: SortKey) => void
 }) {
-  const { clients, projects, tasks } = useAppStore()
-  const isEdit = !!entry
+  return (
+    <th>
+      <button type="button" onClick={() => onSort(column)} className="flex items-center gap-1">
+        {label}
+        {sortKey === column && (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+      </button>
+    </th>
+  )
+}
 
+function EntryModal({ entry, onClose }: { entry?: TimeEntryWithRelations; onClose: () => void }) {
+  const { clients, projects, tasks } = useAppStore()
+  const isEdit = Boolean(entry)
   const [clientId, setClientId] = useState(entry?.clientId || '')
   const [projectId, setProjectId] = useState(entry?.projectId || '')
   const [taskId, setTaskId] = useState(entry?.taskId || '')
-  const [startDate, setStartDate] = useState(entry?.startedAt ? new Date(entry.startedAt).toISOString().slice(0, 16) : '')
-  const [endDate, setEndDate] = useState(entry?.endedAt ? new Date(entry.endedAt).toISOString().slice(0, 16) : '')
+  const [startDate, setStartDate] = useState(toDateTimeLocalValue(entry?.startedAt))
+  const [endDate, setEndDate] = useState(toDateTimeLocalValue(entry?.endedAt))
   const [billable, setBillable] = useState(entry?.billable ?? true)
   const [note, setNote] = useState(entry?.note || '')
   const [saving, setSaving] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const filteredProjects = clientId ? projects.filter(p => p.clientId === clientId) : projects
-  const filteredTasks = projectId ? tasks.filter(t => t.projectId === projectId) : tasks
+  const filteredProjects = clientId ? projects.filter(project => project.clientId === clientId) : projects
+  const filteredTasks = projectId ? tasks.filter(task => task.projectId === projectId) : tasks
+
+  const validate = () => {
+    const nextErrors: Record<string, string> = {}
+    if (!startDate) nextErrors.startDate = 'Start time is required.'
+    if (!isEdit && !endDate) nextErrors.endDate = 'End time is required for manual entries.'
+    if (startDate && endDate && new Date(startDate).getTime() >= new Date(endDate).getTime()) {
+      nextErrors.endDate = 'End time must be after the start time.'
+    }
+    setErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
+  }
 
   const handleSave = async () => {
+    if (!validate()) return
     setSaving(true)
     try {
       if (isEdit) {
@@ -276,12 +348,11 @@ function EntryModal({
           startedAt: startDate ? new Date(startDate).toISOString() : undefined,
           endedAt: endDate ? new Date(endDate).toISOString() : null,
           billable,
-          note: note || null
+          note: note.trim() || null
         }
         await window.api.updateEntry(payload)
         toast.success('Entry updated')
       } else {
-        if (!startDate || !endDate) return
         const payload: CreateEntryPayload = {
           clientId: clientId || undefined,
           projectId: projectId || undefined,
@@ -289,93 +360,94 @@ function EntryModal({
           startedAt: new Date(startDate).toISOString(),
           endedAt: new Date(endDate).toISOString(),
           billable,
-          note: note || undefined
+          note: note.trim() || undefined
         }
         await window.api.createEntry(payload)
         toast.success('Entry created')
       }
       onClose()
-    } catch (e: any) {
-      toast.error('Save failed', e.message || 'Something went wrong.')
+    } catch (error: any) {
+      toast.error('Save failed', error.message || 'The entry could not be saved.')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-fade-in" onClick={onClose}>
-      <div className="bg-surface-2 border border-border rounded-xl w-full max-w-lg p-6 shadow-popup animate-slide-up" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold">{isEdit ? 'Edit Entry' : 'New Entry'}</h2>
-          <button onClick={onClose} className="btn btn-ghost btn-icon">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Start</label>
-              <input type="datetime-local" value={startDate} onChange={e => setStartDate(e.target.value)} className="input" />
-            </div>
-            <div>
-              <label className="label">End</label>
-              <input type="datetime-local" value={endDate} onChange={e => setEndDate(e.target.value)} className="input" />
-            </div>
-          </div>
-
-          <div>
-            <label className="label">Client</label>
-            <select value={clientId} onChange={e => { setClientId(e.target.value); setProjectId(''); setTaskId('') }} className="select">
-              <option value="">No client</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="label">Project</label>
-            <select value={projectId} onChange={e => { setProjectId(e.target.value); setTaskId('') }} className="select">
-              <option value="">No project</option>
-              {filteredProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="label">Task</label>
-            <select value={taskId} onChange={e => setTaskId(e.target.value)} className="select">
-              <option value="">No task</option>
-              {filteredTasks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <label className="label mb-0">Billable</label>
-            <button
-              onClick={() => setBillable(!billable)}
-              className={`w-10 h-5 rounded-full transition-colors ${billable ? 'bg-accent' : 'bg-surface-4'} relative`}
-            >
-              <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${billable ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
-
-          <div>
-            <label className="label">Notes</label>
-            <textarea
-              value={note}
-              onChange={e => setNote(e.target.value)}
-              className="input min-h-[60px] resize-y"
-              placeholder="Optional notes..."
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-border">
-          <button onClick={onClose} className="btn btn-ghost">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary">
+    <Dialog
+      title={isEdit ? 'Edit Time Entry' : 'New Manual Entry'}
+      description="Keep corrections precise so exports and summaries stay trustworthy."
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose} variant="ghost">Cancel</Button>
+          <Button onClick={handleSave} disabled={saving} variant="primary">
             {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Entry'}
-          </button>
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="td-form-grid">
+          <Field label="Start" error={errors.startDate}>
+            <TextInput type="datetime-local" value={startDate} onChange={event => setStartDate(event.target.value)} />
+          </Field>
+          <Field label="End" error={errors.endDate}>
+            <TextInput type="datetime-local" value={endDate} onChange={event => setEndDate(event.target.value)} />
+          </Field>
         </div>
+
+        <Field label="Client">
+          <SelectInput value={clientId} onChange={event => { setClientId(event.target.value); setProjectId(''); setTaskId('') }}>
+            <option value="">No client</option>
+            {clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
+          </SelectInput>
+        </Field>
+
+        <Field label="Project">
+          <SelectInput value={projectId} onChange={event => { setProjectId(event.target.value); setTaskId('') }}>
+            <option value="">No project</option>
+            {filteredProjects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+          </SelectInput>
+        </Field>
+
+        <Field label="Task">
+          <SelectInput value={taskId} onChange={event => setTaskId(event.target.value)}>
+            <option value="">No task</option>
+            {filteredTasks.map(task => <option key={task.id} value={task.id}>{task.name}</option>)}
+          </SelectInput>
+        </Field>
+
+        <Panel className="p-3">
+          <SwitchControl
+            checked={billable}
+            onChange={setBillable}
+            label="Billable entry"
+            description="Include this time in invoice-ready summaries and PDF exports."
+          />
+        </Panel>
+
+        <Field label="Notes">
+          <TextArea value={note} onChange={event => setNote(event.target.value)} placeholder="Optional context for reports..." />
+        </Field>
       </div>
-    </div>
+    </Dialog>
   )
+}
+
+function getSortValue(entry: TimeEntryWithRelations, key: SortKey): string | number | boolean {
+  switch (key) {
+    case 'client':
+      return entry.client?.name || ''
+    case 'project':
+      return entry.project?.name || ''
+    case 'task':
+      return entry.task?.name || ''
+    case 'billable':
+      return entry.billable ? 1 : 0
+    case 'net':
+      return getEntryNetMinutes(entry)
+    default:
+      return entry[key] || ''
+  }
 }

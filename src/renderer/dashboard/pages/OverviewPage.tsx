@@ -1,236 +1,312 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect } from 'react'
+import {
+  Briefcase,
+  CalendarDays,
+  Clock,
+  Coffee,
+  DollarSign,
+  LogIn,
+  LogOut,
+  Pause,
+  Play,
+  TimerReset,
+  TrendingUp
+} from 'lucide-react'
+import { WorkStatus } from '@shared/types'
+import { formatDuration, startOfDay } from '@shared/utils'
 import { useAppStore } from '../../store'
 import { toast } from '../../components/toast/toastStore'
-import { WorkStatus } from '@shared/types'
-import { formatTimerDisplay, formatDuration } from '@shared/utils'
 import {
-  Clock, TrendingUp, DollarSign, Coffee,
-  LogIn, LogOut, Pause, Play, Briefcase
-} from 'lucide-react'
+  Button,
+  EmptyState,
+  PageHeader,
+  Panel,
+  SectionHeader,
+  StatBlock,
+  StatusBadge,
+  TableShell
+} from '../../components/ui'
+import { useLiveSessionTimer } from '../../hooks/useLiveSessionTimer'
+import {
+  describeEntryContext,
+  formatDate,
+  formatEntryDuration,
+  formatEntryWindow,
+  getStatusMeta
+} from '../../lib/viewUtils'
 
 export default function OverviewPage() {
-  const { session, daySummary, weekSummary, isLoading, clockIn, clockOut, startBreak, endBreak } = useAppStore()
-  const [elapsed, setElapsed] = useState(0)
-  const [breakElapsed, setBreakElapsed] = useState(0)
-  const timerRef = useRef<ReturnType<typeof setInterval>>()
-
-  const status = session?.status ?? WorkStatus.OffWork
-
-  useEffect(() => {
-    if (session) {
-      setElapsed(session.elapsedSeconds)
-      setBreakElapsed(session.breakElapsedSeconds)
-      timerRef.current = setInterval(() => {
-        if (session.status === WorkStatus.Working) {
-          setElapsed(prev => prev + 1)
-        } else {
-          setBreakElapsed(prev => prev + 1)
-        }
-      }, 1000)
-    } else {
-      setElapsed(0)
-      setBreakElapsed(0)
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [session])
-
-  const handleClockIn = async () => { try { await clockIn(); toast.success('Clocked in') } catch (e: any) { toast.error('Clock in failed', e.message) } }
-  const handleClockOut = async () => { try { await clockOut(); toast.success('Clocked out') } catch (e: any) { toast.error('Clock out failed', e.message) } }
-  const handleStartBreak = async () => { try { await startBreak(); toast.info('Break started') } catch (e: any) { toast.error('Break failed', e.message) } }
-  const handleEndBreak = async () => { try { await endBreak(); toast.success('Break ended') } catch (e: any) { toast.error('Resume failed', e.message) } }
-
-  return (
-    <div className="max-w-5xl animate-fade-in">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-text-primary">Overview</h1>
-        <p className="text-sm text-text-secondary mt-1">Your time tracking command center</p>
-      </div>
-
-      {/* Live Session Card */}
-      <div className={`card mb-6 relative overflow-hidden ${
-        status === WorkStatus.Working ? 'border-status-working/30' :
-        status === WorkStatus.OnBreak ? 'border-status-break/30' : ''
-      }`}>
-        {status !== WorkStatus.OffWork && (
-          <div className={`absolute top-0 left-0 right-0 h-0.5 ${
-            status === WorkStatus.Working ? 'bg-status-working' : 'bg-status-break'
-          }`} />
-        )}
-
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-3">
-              <div className={`badge ${
-                status === WorkStatus.Working ? 'badge-working' :
-                status === WorkStatus.OnBreak ? 'badge-break' : 'badge-off'
-              }`}>
-                <div className={`w-1.5 h-1.5 rounded-full ${
-                  status === WorkStatus.Working ? 'bg-status-working animate-timer-pulse' :
-                  status === WorkStatus.OnBreak ? 'bg-status-break' : 'bg-status-off'
-                }`} />
-                {status === WorkStatus.Working ? 'Working' :
-                 status === WorkStatus.OnBreak ? 'On Break' : 'Off Work'}
-              </div>
-              {session?.entry.project && (
-                <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-                  <Briefcase className="w-3 h-3" />
-                  {session.entry.client?.name && <span>{session.entry.client.name} ·</span>}
-                  <span className="text-text-primary font-medium">{session.entry.project.name}</span>
-                </div>
-              )}
-            </div>
-
-            <div className={`font-mono text-4xl font-bold tracking-tight ${
-              status === WorkStatus.Working ? 'text-status-working' :
-              status === WorkStatus.OnBreak ? 'text-status-break' : 'text-text-tertiary'
-            }`}>
-              {session ? formatTimerDisplay(elapsed) : '00:00:00'}
-            </div>
-
-            {status === WorkStatus.OnBreak && (
-              <div className="flex items-center gap-1.5 mt-2 text-sm text-status-break">
-                <Coffee className="w-3.5 h-3.5" />
-                Break: {formatTimerDisplay(breakElapsed)}
-              </div>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            {status === WorkStatus.OffWork ? (
-              <button onClick={handleClockIn} disabled={isLoading} className="btn btn-success gap-2">
-                <LogIn className="w-4 h-4" />
-                Clock In
-              </button>
-            ) : (
-              <>
-                {status === WorkStatus.Working ? (
-                  <button onClick={handleStartBreak} disabled={isLoading} className="btn btn-warning gap-2">
-                    <Pause className="w-4 h-4" />
-                    Break
-                  </button>
-                ) : (
-                  <button onClick={handleEndBreak} disabled={isLoading} className="btn btn-success gap-2">
-                    <Play className="w-4 h-4" />
-                    Resume
-                  </button>
-                )}
-                <button onClick={handleClockOut} disabled={isLoading} className="btn btn-danger gap-2">
-                  <LogOut className="w-4 h-4" />
-                  Clock Out
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <SummaryCard
-          icon={<Clock className="w-4 h-4" />}
-          label="Today"
-          value={daySummary ? formatDuration(daySummary.netMinutes) : '0m'}
-          detail={`${daySummary?.entryCount || 0} entries`}
-          color="text-accent"
-        />
-        <SummaryCard
-          icon={<TrendingUp className="w-4 h-4" />}
-          label="This Week"
-          value={weekSummary ? formatDuration(weekSummary.netMinutes) : '0m'}
-          detail={`${weekSummary?.entryCount || 0} entries`}
-          color="text-info"
-        />
-        <SummaryCard
-          icon={<DollarSign className="w-4 h-4" />}
-          label="Billable (Week)"
-          value={weekSummary ? formatDuration(weekSummary.billableMinutes) : '0m'}
-          detail={weekSummary && weekSummary.netMinutes > 0
-            ? `${Math.round((weekSummary.billableMinutes / weekSummary.netMinutes) * 100)}% utilization`
-            : '0% utilization'}
-          color="text-success"
-        />
-        <SummaryCard
-          icon={<Coffee className="w-4 h-4" />}
-          label="Break Time (Week)"
-          value={weekSummary ? formatDuration(weekSummary.breakMinutes) : '0m'}
-          detail={weekSummary && weekSummary.totalMinutes > 0
-            ? `${Math.round((weekSummary.breakMinutes / weekSummary.totalMinutes) * 100)}% of total`
-            : '—'}
-          color="text-warning"
-        />
-      </div>
-
-      {/* Recent Entries */}
-      <div className="card">
-        <h3 className="text-sm font-semibold text-text-primary mb-4">Today's Entries</h3>
-        <RecentEntries />
-      </div>
-    </div>
-  )
-}
-
-function SummaryCard({ icon, label, value, detail, color }: {
-  icon: React.ReactNode; label: string; value: string; detail: string; color: string
-}) {
-  return (
-    <div className="card-hover">
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`${color} opacity-70`}>{icon}</div>
-        <span className="text-xs text-text-tertiary uppercase tracking-wider">{label}</span>
-      </div>
-      <div className={`text-xl font-bold ${color}`}>{value}</div>
-      <div className="text-2xs text-text-tertiary mt-1">{detail}</div>
-    </div>
-  )
-}
-
-function RecentEntries() {
-  const { entries, loadEntries } = useAppStore()
-  const [loaded, setLoaded] = useState(false)
+  const {
+    session,
+    entries,
+    daySummary,
+    weekSummary,
+    isLoading,
+    clockIn,
+    clockOut,
+    startBreak,
+    endBreak,
+    loadEntries
+  } = useAppStore()
+  const { status, timer, breakTimer } = useLiveSessionTimer(session)
+  const statusMeta = getStatusMeta(status)
 
   useEffect(() => {
-    if (!loaded) {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      loadEntries({ startDate: today.toISOString(), limit: 10 })
-      setLoaded(true)
-    }
-  }, [loaded])
+    loadEntries({ startDate: startOfDay(new Date()), limit: 10 })
+  }, [])
 
-  if (entries.length === 0) {
-    return <div className="text-sm text-text-tertiary py-4 text-center">No entries today</div>
+  const handleClockIn = async () => {
+    try {
+      await clockIn()
+      toast.success('Clocked in')
+    } catch (error: any) {
+      toast.error('Clock in failed', error.message)
+    }
+  }
+
+  const handleClockOut = async () => {
+    try {
+      await clockOut()
+      toast.success('Clocked out')
+    } catch (error: any) {
+      toast.error('Clock out failed', error.message)
+    }
+  }
+
+  const handleStartBreak = async () => {
+    try {
+      await startBreak()
+      toast.info('Break started')
+    } catch (error: any) {
+      toast.error('Break failed', error.message)
+    }
+  }
+
+  const handleEndBreak = async () => {
+    try {
+      await endBreak()
+      toast.success('Break ended')
+    } catch (error: any) {
+      toast.error('Resume failed', error.message)
+    }
   }
 
   return (
-    <div className="space-y-1">
-      {entries.map(entry => {
-        const startTime = entry.startedAt ? new Date(entry.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
-        const endTime = entry.endedAt ? new Date(entry.endedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active'
-        const breakMins = entry.breaks.reduce((s, b) => s + (b.durationMinutes || 0), 0)
-        const netMins = (entry.durationMinutes || 0) - breakMins
+    <div className="animate-fade-in">
+      <PageHeader
+        eyebrow="Command Center"
+        title="Overview"
+        description="Track the active session, review today’s work, and check weekly billing rhythm without leaving the desktop flow."
+        meta={<StatusBadge status={status} />}
+      />
 
-        return (
-          <div key={entry.id} className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-surface-3 transition-colors">
-            <div className="flex items-center gap-3">
-              <div className="text-xs text-text-tertiary font-mono w-24">
-                {startTime} — {endTime}
+      <div className="td-split">
+        <div className="space-y-4">
+          <Panel className="overflow-hidden">
+            <div className="flex items-start justify-between gap-5 border-b border-[color:var(--td-line)] p-5">
+              <div className="min-w-0">
+                <div className="mb-3 flex items-center gap-2">
+                  <StatusBadge status={status} />
+                  {session?.entry.project && (
+                    <span className="td-pill td-pill-accent">
+                      <Briefcase className="h-3.5 w-3.5" />
+                      <span className="truncate">
+                        {session.entry.client?.name ? `${session.entry.client.name} / ` : ''}
+                        {session.entry.project.name}
+                      </span>
+                    </span>
+                  )}
+                </div>
+                <div className={`td-mono text-[42px] font-bold leading-none ${statusMeta.textClass}`}>
+                  {session ? timer : '00:00:00'}
+                </div>
+                {status === WorkStatus.OnBreak && (
+                  <div className="mt-3 flex items-center gap-2 text-sm text-[color:var(--td-warning)]">
+                    <Coffee className="h-4 w-4" />
+                    Break timer: <span className="td-mono font-semibold">{breakTimer}</span>
+                  </div>
+                )}
+                <p className="mt-3 max-w-xl text-sm leading-relaxed text-[color:var(--td-text-secondary)]">
+                  {session
+                    ? session.entry.note || 'Current session is live and stored locally for reporting.'
+                    : 'Choose a project from the utility widget or clock in directly when the work is unassigned.'}
+                </p>
               </div>
-              <div className="text-sm text-text-primary">
-                {entry.project?.name || 'No project'}
+
+              <div className="flex shrink-0 items-center gap-2">
+                {status === WorkStatus.OffWork ? (
+                  <Button onClick={handleClockIn} disabled={isLoading} variant="success">
+                    <LogIn className="h-4 w-4" />
+                    Clock In
+                  </Button>
+                ) : (
+                  <>
+                    {status === WorkStatus.Working ? (
+                      <Button onClick={handleStartBreak} disabled={isLoading} variant="warning">
+                        <Pause className="h-4 w-4" />
+                        Break
+                      </Button>
+                    ) : (
+                      <Button onClick={handleEndBreak} disabled={isLoading} variant="success">
+                        <Play className="h-4 w-4" />
+                        Resume
+                      </Button>
+                    )}
+                    <Button onClick={handleClockOut} disabled={isLoading} variant="danger">
+                      <LogOut className="h-4 w-4" />
+                      Clock Out
+                    </Button>
+                  </>
+                )}
               </div>
-              {entry.client && (
-                <div className="text-xs text-text-tertiary">{entry.client.name}</div>
-              )}
-              {entry.billable && (
-                <div className="badge badge-working text-2xs">$</div>
+            </div>
+
+            <div className="td-grid-4 p-4">
+              <StatBlock
+                icon={<Clock className="h-4 w-4" />}
+                label="Today"
+                value={daySummary ? formatDuration(daySummary.netMinutes) : '0m'}
+                detail={`${daySummary?.entryCount || 0} entries logged`}
+                tone="accent"
+              />
+              <StatBlock
+                icon={<TrendingUp className="h-4 w-4" />}
+                label="This Week"
+                value={weekSummary ? formatDuration(weekSummary.netMinutes) : '0m'}
+                detail={`${weekSummary?.entryCount || 0} total entries`}
+              />
+              <StatBlock
+                icon={<DollarSign className="h-4 w-4" />}
+                label="Billable"
+                value={weekSummary ? formatDuration(weekSummary.billableMinutes) : '0m'}
+                detail={weekSummary && weekSummary.netMinutes > 0
+                  ? `${Math.round((weekSummary.billableMinutes / weekSummary.netMinutes) * 100)}% of net time`
+                  : 'No billable time yet'}
+                tone="success"
+              />
+              <StatBlock
+                icon={<Coffee className="h-4 w-4" />}
+                label="Breaks"
+                value={weekSummary ? formatDuration(weekSummary.breakMinutes) : '0m'}
+                detail="Tracked this week"
+                tone="warning"
+              />
+            </div>
+          </Panel>
+
+          <Panel className="p-4">
+            <SectionHeader
+              title="Today’s Entries"
+              description="A compact audit trail for the active day."
+              compact
+            />
+            <RecentEntries entries={entries} />
+          </Panel>
+        </div>
+
+        <aside className="space-y-4">
+          <Panel className="p-4">
+            <SectionHeader
+              title="Week Rhythm"
+              description={weekSummary ? `${formatDate(weekSummary.weekStart)} through ${formatDate(weekSummary.weekEnd)}` : 'Current week'}
+              compact
+            />
+            <div className="space-y-3">
+              {(weekSummary?.days || []).map(day => {
+                const max = Math.max(weekSummary?.days.reduce((largest, item) => Math.max(largest, item.netMinutes), 1) || 1, 1)
+                const width = Math.max(5, Math.round((day.netMinutes / max) * 100))
+                return (
+                  <div key={day.date}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="font-medium text-[color:var(--td-text-secondary)]">
+                        {new Date(day.date).toLocaleDateString([], { weekday: 'short' })}
+                      </span>
+                      <span className="td-mono text-[color:var(--td-text-tertiary)]">{formatDuration(day.netMinutes)}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-[color:var(--td-track)]">
+                      <div className="h-full rounded-full bg-[color:var(--td-accent)]" style={{ width: `${width}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+              {!weekSummary?.days?.length && (
+                <EmptyState
+                  compact
+                  icon={<CalendarDays className="h-5 w-5" />}
+                  title="No weekly data yet"
+                  description="Clock in or add a manual entry to build the week view."
+                />
               )}
             </div>
-            <div className="text-sm font-mono text-text-secondary">
-              {entry.endedAt ? formatDuration(netMins) : '—'}
+          </Panel>
+
+          <Panel className="p-4">
+            <SectionHeader title="Session Context" compact />
+            <div className="space-y-3 text-sm">
+              <InfoRow label="Client" value={session?.entry.client?.name || 'Unassigned'} />
+              <InfoRow label="Project" value={session?.entry.project?.name || 'No project selected'} />
+              <InfoRow label="Task" value={session?.entry.task?.name || 'No task'} />
+              <InfoRow label="Billable" value={session?.entry.billable ? 'Yes' : 'No'} />
             </div>
-          </div>
-        )
-      })}
+          </Panel>
+        </aside>
+      </div>
+    </div>
+  )
+}
+
+function RecentEntries({ entries }: { entries: ReturnType<typeof useAppStore.getState>['entries'] }) {
+  if (entries.length === 0) {
+    return (
+      <EmptyState
+        compact
+        icon={<TimerReset className="h-5 w-5" />}
+        title="No entries today"
+        description="Clock in from the topbar or create a manual entry from Time Logs."
+      />
+    )
+  }
+
+  return (
+    <TableShell>
+      <div className="td-table-wrap">
+        <table className="td-table">
+          <thead>
+            <tr>
+              <th>Window</th>
+              <th>Work</th>
+              <th>Billing</th>
+              <th className="text-right">Net</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.slice(0, 8).map(entry => (
+              <tr key={entry.id}>
+                <td className="td-mono whitespace-nowrap">{formatEntryWindow(entry)}</td>
+                <td>
+                  <div className="font-medium text-[color:var(--td-text)]">{entry.project?.name || 'No project'}</div>
+                  <div className="truncate text-[11px] text-[color:var(--td-text-tertiary)]">{describeEntryContext(entry)}</div>
+                </td>
+                <td>
+                  <span className={`td-pill ${entry.billable ? 'td-pill-success' : 'td-pill-neutral'}`}>
+                    {entry.billable ? 'Billable' : 'Non-billable'}
+                  </span>
+                </td>
+                <td className="td-mono text-right font-semibold text-[color:var(--td-text)]">{formatEntryDuration(entry)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </TableShell>
+  )
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-[color:var(--td-line)] pb-2 last:border-b-0 last:pb-0">
+      <span className="text-[12px] text-[color:var(--td-text-tertiary)]">{label}</span>
+      <span className="truncate text-right text-[12px] font-medium text-[color:var(--td-text)]">{value}</span>
     </div>
   )
 }

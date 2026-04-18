@@ -65,7 +65,10 @@ const api = {
 
   // Windows
   openDashboard: () => invoke(IPC_CHANNELS.OPEN_DASHBOARD),
-  closeTrayPopup: () => invoke(IPC_CHANNELS.CLOSE_TRAY_POPUP)
+  closeTrayPopup: () => invoke(IPC_CHANNELS.CLOSE_TRAY_POPUP),
+  setTopbarMenuOpen: (open: boolean) => invoke(IPC_CHANNELS.SET_TOPBAR_MENU_OPEN, open),
+  setTopbarMinimized: (minimized: boolean) => invoke(IPC_CHANNELS.SET_TOPBAR_MINIMIZED, minimized),
+  setTopbarExpanded: (expanded: boolean) => invoke(IPC_CHANNELS.SET_TOPBAR_EXPANDED, expanded)
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -1,79 +1,89 @@
-import { useAppStore } from '../store'
-import { WorkStatus } from '@shared/types'
 import {
-  LayoutDashboard, Clock, FolderOpen, Users,
-  Download, Settings, Coffee
+  Clock,
+  Download,
+  FolderOpen,
+  LayoutDashboard,
+  Settings,
+  TimerReset,
+  Users
 } from 'lucide-react'
+import { useAppStore } from '../store'
+import { StatusBadge } from '../components/ui'
+import { useLiveSessionTimer } from '../hooks/useLiveSessionTimer'
 
-const navItems = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'logs', label: 'Time Logs', icon: Clock },
-  { id: 'projects', label: 'Projects', icon: FolderOpen },
-  { id: 'clients', label: 'Clients', icon: Users },
-  { id: 'exports', label: 'Exports', icon: Download },
-  { id: 'settings', label: 'Settings', icon: Settings }
-]
+export const navItems = [
+  { id: 'overview', label: 'Overview', group: 'Track', icon: LayoutDashboard },
+  { id: 'logs', label: 'Time Logs', group: 'Track', icon: Clock },
+  { id: 'projects', label: 'Projects', group: 'Manage', icon: FolderOpen },
+  { id: 'clients', label: 'Clients', group: 'Manage', icon: Users },
+  { id: 'exports', label: 'Exports', group: 'Output', icon: Download },
+  { id: 'settings', label: 'Settings', group: 'Output', icon: Settings }
+] as const
 
 export default function Sidebar() {
-  const { activePage, setActivePage, session } = useAppStore()
-  const status = session?.status ?? WorkStatus.OffWork
+  const { activePage, setActivePage, session, clients, projects } = useAppStore()
+  const { status, timer } = useLiveSessionTimer(session)
+  const grouped = navItems.reduce<Record<string, typeof navItems[number][]>>((acc, item) => {
+    if (!acc[item.group]) acc[item.group] = []
+    acc[item.group].push(item)
+    return acc
+  }, {})
 
   return (
-    <aside className="w-56 bg-surface-1 border-r border-border flex flex-col pt-14 pb-4 shrink-0">
-      {/* Brand */}
-      <div className="px-5 mb-6 flex items-center gap-2.5 titlebar-no-drag">
-        <div className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center">
-          <Clock className="w-4 h-4 text-white" />
+    <aside className="td-sidebar titlebar-no-drag">
+      <div className="td-brand">
+        <div className="td-brand-mark">
+          <TimerReset className="h-4 w-4" />
         </div>
-        <div>
-          <div className="text-sm font-bold text-text-primary leading-none">TimeDock</div>
-          <div className="text-2xs text-text-tertiary mt-0.5">Time Tracker</div>
-        </div>
-      </div>
-
-      {/* Status pill */}
-      <div className="px-4 mb-5 titlebar-no-drag">
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium
-          ${status === WorkStatus.Working ? 'bg-status-working-bg text-status-working' :
-            status === WorkStatus.OnBreak ? 'bg-status-break-bg text-status-break' :
-            'bg-status-off-bg text-status-off'}`}
-        >
-          <div className={`w-1.5 h-1.5 rounded-full ${
-            status === WorkStatus.Working ? 'bg-status-working animate-timer-pulse' :
-            status === WorkStatus.OnBreak ? 'bg-status-break' :
-            'bg-status-off'}`}
-          />
-          {status === WorkStatus.Working ? 'Working' :
-           status === WorkStatus.OnBreak ? 'On Break' : 'Off Work'}
-          {status === WorkStatus.OnBreak && <Coffee className="w-3 h-3 ml-auto" />}
+        <div className="min-w-0">
+          <div className="td-brand-title">TimeDock</div>
+          <div className="td-brand-subtitle">Local time utility</div>
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 space-y-0.5 titlebar-no-drag">
-        {navItems.map(item => {
-          const Icon = item.icon
-          const isActive = activePage === item.id
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActivePage(item.id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-100
-                ${isActive
-                  ? 'bg-accent/10 text-accent font-medium'
-                  : 'text-text-secondary hover:bg-surface-3 hover:text-text-primary'
-                }`}
-            >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-accent' : 'text-text-tertiary'}`} />
-              {item.label}
-            </button>
-          )
-        })}
+      <div className="td-sidebar-status">
+        <StatusBadge status={status} compact />
+        <div className="td-sidebar-status-time td-mono">{timer}</div>
+        <div className="mt-1 truncate text-[11px] text-[color:var(--td-text-tertiary)]">
+          {session?.entry.project?.name || 'No active project'}
+        </div>
+      </div>
+
+      <nav className="td-sidebar-nav" aria-label="Dashboard sections">
+        {Object.entries(grouped).map(([group, items]) => (
+          <div key={group}>
+            <div className="td-sidebar-group-label">{group}</div>
+            <div className="flex flex-col gap-0.5">
+              {items.map(item => {
+                const Icon = item.icon
+                const active = activePage === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActivePage(item.id)}
+                    className={`td-sidebar-item ${active ? 'td-sidebar-item-active' : ''}`}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
-      {/* Footer */}
-      <div className="px-5 pt-3 border-t border-border titlebar-no-drag">
-        <div className="text-2xs text-text-tertiary">TimeDock v1.0.0</div>
+      <div className="td-sidebar-footer">
+        <div className="flex items-center justify-between">
+          <span>TimeDock v1.0.0</span>
+          <span>{clients.length} clients</span>
+        </div>
+        <div className="mt-1 flex items-center justify-between">
+          <span>Local SQLite</span>
+          <span>{projects.length} projects</span>
+        </div>
       </div>
     </aside>
   )
