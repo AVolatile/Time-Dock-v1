@@ -37,10 +37,24 @@ Designed for the solo operator, the elite freelancer, and the agile small agency
    npm run dev
    ```
 
-3. **Build Product**:
+3. **Build Core**:
    ```bash
    npm run build
    ```
+
+## 📦 Production Release Build (macOS)
+
+To generate a standalone, native macOS `.app` bundle and a distributable `.dmg` installer artifact, simply execute the package script:
+
+```bash
+npm run make
+```
+
+Upon completion, all built artifacts will be placed in the `/dist` directory. The primary outputs you care about are located exactly at:
+- **Application Bundle**: `dist/mac-arm64/TimeDock.app`
+- **Installer DMG**: `dist/TimeDock-1.0.0-arm64.dmg`
+
+> **Note**: You can drag the compiled `TimeDock.app` into your local `Applications/` folder and launch the product exactly as you would any native macOS application! Future deployments may require Apple Developer credentialing for external code-signing and notarization via `electron-builder`.
 
 ---
 
