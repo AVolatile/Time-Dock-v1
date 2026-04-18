@@ -45,5 +45,16 @@
     "react-dom": "^18.3.0",
     "recharts": "^2.12.0",
     "zustand": "^4.5.2"
+  },
+  "build": {
+    "appId": "com.timedock.app",
+    "productName": "TimeDock",
+    "directories": {
+      "buildResources": "resources"
+    },
+    "mac": {
+      "icon": "resources/icon.png",
+      "target": "dmg"
+    }
   }
 }

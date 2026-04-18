@@ -140,6 +140,7 @@ function createTopbarWindow({ focus = true }: { focus?: boolean } = {}): void {
     ...bounds,
     show: false,
     frame: false,
+    icon: path.join(__dirname, '../../resources/icon.png'),
     resizable: false,
     movable: true,
     alwaysOnTop: false,
@@ -195,6 +196,7 @@ function createDashboardWindow(): void {
     minWidth: 900,
     minHeight: 600,
     show: false,
+    icon: path.join(__dirname, '../../resources/icon.png'),
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     vibrancy: 'under-window',
@@ -270,6 +272,9 @@ function setupTray(): void {
 // --- App Lifecycle ---
 
 app.whenReady().then(() => {
+  if (process.platform === 'darwin') {
+    app.dock.setIcon(path.join(__dirname, '../../resources/icon.png'))
+  }
   getDatabase()
   seedDatabase()
   registerIpcHandlers()
