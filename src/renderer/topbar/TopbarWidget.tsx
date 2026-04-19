@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import {
   BarChart3,
@@ -37,6 +37,7 @@ const MENU_WIDTHS: Record<Exclude<ActiveMenu, null>, number> = {
   clients: 284,
   projects: 340
 }
+const WIDGET_TRANSITION_MS = 280
 
 export default function TopbarWidget() {
   const {
@@ -65,6 +66,7 @@ export default function TopbarWidget() {
   const statusMeta = getStatusMeta(status)
 
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpandedContentMounted, setIsExpandedContentMounted] = useState(false)
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null)
   const [activeTab, setActiveTab] = useState<WidgetTab>('overview')
   const [selectedClientId, setSelectedClientId] = useState('')
@@ -74,6 +76,8 @@ export default function TopbarWidget() {
   const clientButtonRef = useRef<HTMLButtonElement>(null)
   const projectButtonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const collapseTimerRef = useRef<number | null>(null)
+  const expandFrameRef = useRef<number | null>(null)
 
   const activeClients = useMemo(() => clients.filter(client => client.active), [clients])
   const activeProjects = useMemo(() => projects.filter(project => project.active), [projects])
@@ -83,6 +87,40 @@ export default function TopbarWidget() {
   const currentClient = session?.entry.client || getProjectClient(currentProject, clients) || selectedClient
   const visibleProjects = selectedClientId ? activeProjects.filter(project => project.clientId === selectedClientId) : activeProjects
   const recentEntries = entries.slice(0, 6)
+  const mediumSurfaceVisible = isExpanded || isExpandedContentMounted
+
+  const clearWidgetTransitionTimers = useCallback(() => {
+    if (collapseTimerRef.current) {
+      window.clearTimeout(collapseTimerRef.current)
+      collapseTimerRef.current = null
+    }
+
+    if (expandFrameRef.current) {
+      window.cancelAnimationFrame(expandFrameRef.current)
+      expandFrameRef.current = null
+    }
+  }, [])
+
+  const expandWidget = useCallback(() => {
+    clearWidgetTransitionTimers()
+    window.api.setTopbarExpanded(true).catch(() => undefined)
+    setIsExpandedContentMounted(true)
+    expandFrameRef.current = window.requestAnimationFrame(() => {
+      setIsExpanded(true)
+      expandFrameRef.current = null
+    })
+  }, [clearWidgetTransitionTimers])
+
+  const collapseWidget = useCallback(() => {
+    clearWidgetTransitionTimers()
+    setActiveMenu(null)
+    setIsExpanded(false)
+    collapseTimerRef.current = window.setTimeout(() => {
+      setIsExpandedContentMounted(false)
+      collapseTimerRef.current = null
+      window.api.setTopbarExpanded(false).catch(() => undefined)
+    }, WIDGET_TRANSITION_MS)
+  }, [clearWidgetTransitionTimers])
 
   useEffect(() => {
     refreshSession()
@@ -106,20 +144,17 @@ export default function TopbarWidget() {
   }, [session?.entry.clientId, session?.entry.project?.clientId])
 
   useEffect(() => {
-    window.api.setTopbarExpanded(isExpanded).catch(() => undefined)
-  }, [isExpanded])
-
-  useEffect(() => {
-    const surfaceOpen = !isExpanded && toastCount > 0
+    const surfaceOpen = !mediumSurfaceVisible && toastCount > 0
     window.api.setTopbarMenuOpen(surfaceOpen).catch(() => undefined)
-  }, [isExpanded, toastCount])
+  }, [mediumSurfaceVisible, toastCount])
 
   useEffect(() => {
     return () => {
+      clearWidgetTransitionTimers()
       window.api.setTopbarExpanded(false).catch(() => undefined)
       window.api.setTopbarMenuOpen(false).catch(() => undefined)
     }
-  }, [])
+  }, [clearWidgetTransitionTimers])
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
@@ -168,7 +203,7 @@ export default function TopbarWidget() {
   }
 
   const toggleMenu = (menu: Exclude<ActiveMenu, null>) => {
-    if (!isExpanded) setIsExpanded(true)
+    if (!isExpanded) expandWidget()
     setActiveMenu(current => (current === menu ? null : menu))
   }
 
@@ -258,7 +293,9 @@ export default function TopbarWidget() {
   return (
     <div className="topbar-stage td-utility select-none">
       <section
-        className={`timedock-widget ${isExpanded ? 'timedock-widget-expanded' : 'timedock-widget-compact'}`}
+        className={`timedock-widget ${isExpanded ? 'timedock-widget-expanded' : 'timedock-widget-compact'} ${
+          isExpandedContentMounted ? 'timedock-widget-medium-mounted' : ''
+        }`}
         style={{ WebkitAppRegion: 'drag' } as any}
       >
         <header className="widget-header">
@@ -279,8 +316,8 @@ export default function TopbarWidget() {
             </div>
           </div>
 
-          {isExpanded && (
-            <div className="widget-context" style={{ WebkitAppRegion: 'no-drag' } as any}>
+          {isExpandedContentMounted && (
+            <div className={`widget-context ${isExpanded ? 'widget-content-enter' : 'widget-content-exit'}`} style={{ WebkitAppRegion: 'no-drag' } as any}>
               <button
                 ref={clientButtonRef}
                 type="button"
@@ -319,14 +356,14 @@ export default function TopbarWidget() {
               onStartBreak={handleStartBreak}
               onEndBreak={handleEndBreak}
             />
-            {isExpanded && (
+            {isExpandedContentMounted && (
               <button type="button" onClick={() => handleOpenDashboard(activeTab)} className="topbar-icon-btn" aria-label="Open dashboard">
                 <LayoutDashboard className="h-3.5 w-3.5" />
               </button>
             )}
             <button
               type="button"
-              onClick={() => { setActiveMenu(null); setIsExpanded(current => !current) }}
+              onClick={() => { isExpanded ? collapseWidget() : expandWidget() }}
               className="topbar-icon-btn widget-expand-btn"
               aria-label={isExpanded ? 'Collapse widget' : 'Expand widget'}
               aria-expanded={isExpanded}
@@ -336,8 +373,8 @@ export default function TopbarWidget() {
           </div>
         </header>
 
-        {isExpanded && (
-          <div className="widget-dashboard animate-fade-in" style={{ WebkitAppRegion: 'no-drag' } as any}>
+        {isExpandedContentMounted && (
+          <div className={`widget-dashboard ${isExpanded ? 'widget-content-enter' : 'widget-content-exit'}`} style={{ WebkitAppRegion: 'no-drag' } as any}>
             <div className="widget-tabbar" role="tablist" aria-label="Topbar widget sections">
               <WidgetTabButton active={activeTab === 'overview'} icon={<BarChart3 className="h-3.5 w-3.5" />} label="Overview" onClick={() => setActiveTab('overview')} />
               <WidgetTabButton active={activeTab === 'work'} icon={<FolderOpen className="h-3.5 w-3.5" />} label="Work" onClick={() => setActiveTab('work')} />

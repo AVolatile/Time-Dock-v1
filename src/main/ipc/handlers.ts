@@ -8,12 +8,20 @@ import type {
   ExportPayload,
   ClientPayload,
   ProjectPayload,
-  TaskPayload
+  TaskPayload,
+  KanbanSectionPayload,
+  UpdateKanbanSectionPayload,
+  ReorderKanbanSectionsPayload,
+  KanbanCardPayload,
+  UpdateKanbanCardPayload,
+  MoveKanbanCardPayload,
+  ReorderKanbanCardsPayload
 } from '@shared/types'
 import { timeTrackingService } from '../services/timeTrackingService'
 import { entryService } from '../services/entryService'
 import { exportService } from '../services/exportService'
 import { clientRepo, projectRepo, taskRepo } from '../database/repositories/entityRepos'
+import { kanbanRepo } from '../database/repositories/kanbanRepo'
 
 function handleError(fn: (...args: any[]) => any) {
   return async (_event: Electron.IpcMainInvokeEvent, ...args: any[]) => {
@@ -149,5 +157,51 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.GET_EXPORT_HISTORY, handleError(() => {
     return exportService.getExportHistory()
+  }))
+
+  // --- KanBan Notes ---
+  ipcMain.handle(IPC_CHANNELS.KANBAN_GET_BOARD, handleError((boardId?: string) => {
+    return kanbanRepo.getBoard(boardId)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN_CREATE_SECTION, handleError((payload: KanbanSectionPayload) => {
+    return kanbanRepo.createSection(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN_UPDATE_SECTION, handleError((payload: UpdateKanbanSectionPayload) => {
+    return kanbanRepo.updateSection(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN_DELETE_SECTION, handleError((id: string) => {
+    kanbanRepo.deleteSection(id)
+    return true
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN_REORDER_SECTIONS, handleError((payload: ReorderKanbanSectionsPayload) => {
+    kanbanRepo.reorderSections(payload)
+    return true
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN_CREATE_CARD, handleError((payload: KanbanCardPayload) => {
+    return kanbanRepo.createCard(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN_UPDATE_CARD, handleError((payload: UpdateKanbanCardPayload) => {
+    return kanbanRepo.updateCard(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN_DELETE_CARD, handleError((id: string) => {
+    kanbanRepo.deleteCard(id)
+    return true
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN_MOVE_CARD, handleError((payload: MoveKanbanCardPayload) => {
+    kanbanRepo.moveCard(payload)
+    return true
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.KANBAN_REORDER_CARDS, handleError((payload: ReorderKanbanCardsPayload) => {
+    kanbanRepo.reorderCards(payload)
+    return true
   }))
 }

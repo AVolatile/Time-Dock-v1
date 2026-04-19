@@ -6,6 +6,7 @@ import OverviewPage from './pages/OverviewPage'
 import TimeLogsPage from './pages/TimeLogsPage'
 import ProjectsPage from './pages/ProjectsPage'
 import ClientsPage from './pages/ClientsPage'
+import KanbanNotesPage from './pages/KanbanNotesPage'
 import ExportsPage from './pages/ExportsPage'
 import SettingsPage from './pages/SettingsPage'
 import { AppearanceToggle, StatusBadge } from '../components/ui'
@@ -91,6 +92,8 @@ function renderPage(activePage: string) {
       return <ProjectsPage />
     case 'clients':
       return <ClientsPage />
+    case 'kanban':
+      return <KanbanNotesPage />
     case 'exports':
       return <ExportsPage />
     case 'settings':

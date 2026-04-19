@@ -120,6 +120,84 @@ export interface AppSetting {
   updatedAt: string
 }
 
+export type KanbanContentBlockType = 'text' | 'image' | 'code' | 'link' | 'video_link'
+
+export interface KanbanBoard {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface KanbanSection {
+  id: string
+  boardId: string
+  title: string
+  color: string
+  position: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface KanbanContentBlockBase {
+  id: string
+  type: KanbanContentBlockType
+  position: number
+}
+
+export interface KanbanTextBlock extends KanbanContentBlockBase {
+  type: 'text'
+  content: string
+}
+
+export interface KanbanImageBlock extends KanbanContentBlockBase {
+  type: 'image'
+  src: string
+  alt: string
+  caption: string
+}
+
+export interface KanbanCodeBlock extends KanbanContentBlockBase {
+  type: 'code'
+  language: string
+  content: string
+}
+
+export interface KanbanLinkBlock extends KanbanContentBlockBase {
+  type: 'link'
+  url: string
+  title: string
+  description: string
+}
+
+export interface KanbanVideoLinkBlock extends KanbanContentBlockBase {
+  type: 'video_link'
+  url: string
+  title: string
+  platform: string
+}
+
+export type KanbanContentBlock =
+  | KanbanTextBlock
+  | KanbanImageBlock
+  | KanbanCodeBlock
+  | KanbanLinkBlock
+  | KanbanVideoLinkBlock
+
+export interface KanbanCard {
+  id: string
+  boardId: string
+  sectionId: string
+  title: string
+  description: string
+  accentColor: string
+  labels: string[]
+  contentBlocks: KanbanContentBlock[]
+  position: number
+  createdAt: string
+  updatedAt: string
+}
+
 // --- View Models / Aggregates ---
 
 export interface TimeEntryWithRelations extends TimeEntry {
@@ -158,6 +236,14 @@ export interface WeekSummary {
   nonBillableMinutes: number
   entryCount: number
   days: DaySummary[]
+}
+
+export interface KanbanSectionWithCards extends KanbanSection {
+  cards: KanbanCard[]
+}
+
+export interface KanbanBoardWithSections extends KanbanBoard {
+  sections: KanbanSectionWithCards[]
 }
 
 // --- IPC Channel Definitions ---
@@ -202,6 +288,18 @@ export const IPC_CHANNELS = {
   EXPORT_PDF: 'export:pdf',
   EXPORT_CSV: 'export:csv',
   GET_EXPORT_HISTORY: 'export:history',
+
+  // KanBan notes
+  KANBAN_GET_BOARD: 'kanban:get-board',
+  KANBAN_CREATE_SECTION: 'kanban:create-section',
+  KANBAN_UPDATE_SECTION: 'kanban:update-section',
+  KANBAN_DELETE_SECTION: 'kanban:delete-section',
+  KANBAN_REORDER_SECTIONS: 'kanban:reorder-sections',
+  KANBAN_CREATE_CARD: 'kanban:create-card',
+  KANBAN_UPDATE_CARD: 'kanban:update-card',
+  KANBAN_DELETE_CARD: 'kanban:delete-card',
+  KANBAN_MOVE_CARD: 'kanban:move-card',
+  KANBAN_REORDER_CARDS: 'kanban:reorder-cards',
 
   // Settings
   GET_SETTING: 'settings:get',
@@ -290,4 +388,52 @@ export interface TaskPayload {
   name: string
   category?: EntryCategory
   active?: boolean
+}
+
+export interface KanbanSectionPayload {
+  boardId?: string
+  title: string
+  color?: string
+}
+
+export interface UpdateKanbanSectionPayload {
+  id: string
+  title?: string
+  color?: string
+}
+
+export interface ReorderKanbanSectionsPayload {
+  boardId?: string
+  orderedSectionIds: string[]
+}
+
+export interface KanbanCardPayload {
+  boardId?: string
+  sectionId: string
+  title: string
+  description?: string
+  accentColor?: string
+  labels?: string[]
+  contentBlocks?: KanbanContentBlock[]
+}
+
+export interface UpdateKanbanCardPayload {
+  id: string
+  sectionId?: string
+  title?: string
+  description?: string
+  accentColor?: string
+  labels?: string[]
+  contentBlocks?: KanbanContentBlock[]
+}
+
+export interface MoveKanbanCardPayload {
+  cardId: string
+  targetSectionId: string
+  targetPosition: number
+}
+
+export interface ReorderKanbanCardsPayload {
+  sectionId: string
+  orderedCardIds: string[]
 }

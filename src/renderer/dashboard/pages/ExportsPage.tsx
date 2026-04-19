@@ -22,9 +22,9 @@ export default function ExportsPage() {
   const [startDate, setStartDate] = useState(() => {
     const date = new Date()
     date.setDate(date.getDate() - 7)
-    return date.toISOString().slice(0, 10)
+    return toDateInputValue(date)
   })
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [endDate, setEndDate] = useState(() => toDateInputValue(new Date()))
   const [format, setFormat] = useState<ExportFormat>('pdf')
   const [clientId, setClientId] = useState('')
   const [projectId, setProjectId] = useState('')
@@ -40,7 +40,10 @@ export default function ExportsPage() {
   const filteredProjects = clientId ? projects.filter(project => project.clientId === clientId) : projects
   const rangeError = useMemo(() => {
     if (!startDate || !endDate) return 'Choose both start and end dates.'
-    if (new Date(startDate).getTime() > new Date(endDate).getTime()) return 'End date must be on or after the start date.'
+    const start = parseDateInput(startDate)
+    const end = parseDateInput(endDate)
+    if (!start || !end) return 'Choose valid calendar dates.'
+    if (start.getTime() > end.getTime()) return 'End date must be on or after the start date.'
     return ''
   }, [endDate, startDate])
 
@@ -48,10 +51,12 @@ export default function ExportsPage() {
     if (rangeError) return
     setExporting(true)
     try {
-      const end = new Date(endDate)
-      end.setHours(23, 59, 59, 999)
+      const start = parseDateInput(startDate)
+      const end = parseDateInput(endDate, true)
+      if (!start || !end) throw new Error('Choose a valid export date range.')
+
       const payload = {
-        startDate: new Date(startDate).toISOString(),
+        startDate: start.toISOString(),
         endDate: end.toISOString(),
         clientId: clientId || undefined,
         projectId: projectId || undefined,
@@ -78,7 +83,7 @@ export default function ExportsPage() {
       <PageHeader
         eyebrow="Output"
         title="Exports"
-        description="Generate invoice-ready PDFs or spreadsheet-ready CSV files from local time data."
+        description="Generate branded invoice PDFs or spreadsheet-ready CSV files from local time data."
         meta={<Pill tone="accent">Local file export</Pill>}
       />
 
@@ -103,8 +108,8 @@ export default function ExportsPage() {
               <FormatPanel
                 active={format === 'pdf'}
                 icon={<FileText className="h-5 w-5" />}
-                title="PDF Timecard"
-                detail="Client-friendly report with date range, summaries, and optional notes."
+                title="Branded Invoice PDF"
+                detail="Volatile Solutions report with summaries, day grouping, and optional notes."
               />
               <FormatPanel
                 active={format === 'csv'}
@@ -179,7 +184,7 @@ export default function ExportsPage() {
               <SummaryRow label="Format" value={format.toUpperCase()} />
               <SummaryRow label="Client" value={clients.find(client => client.id === clientId)?.name || 'All clients'} />
               <SummaryRow label="Project" value={projects.find(project => project.id === projectId)?.name || 'All projects'} />
-              <SummaryRow label="Notes" value={format === 'pdf' && includeNotes ? 'Included' : 'Not included'} />
+              <SummaryRow label="Notes" value={format === 'pdf' ? includeNotes ? 'Included' : 'Hidden' : 'Included in CSV'} />
             </div>
           </Panel>
 
@@ -198,6 +203,25 @@ export default function ExportsPage() {
       </div>
     </div>
   )
+}
+
+function toDateInputValue(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function parseDateInput(value: string, endOfDay = false): Date | null {
+  const parts = value.split('-').map(Number)
+  if (parts.length !== 3 || parts.some(part => Number.isNaN(part))) return null
+
+  const [year, month, day] = parts
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null
+
+  date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0)
+  return date
 }
 
 function FormatPanel({

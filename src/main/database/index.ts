@@ -114,12 +114,67 @@ function initializeSchema(database: Database.Database): void {
       updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS kanban_boards (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS kanban_sections (
+      id TEXT PRIMARY KEY,
+      boardId TEXT NOT NULL,
+      title TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#376a8c',
+      position REAL NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (boardId) REFERENCES kanban_boards(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS kanban_cards (
+      id TEXT PRIMARY KEY,
+      boardId TEXT NOT NULL,
+      sectionId TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      accentColor TEXT NOT NULL DEFAULT '#376a8c',
+      labelsJson TEXT NOT NULL DEFAULT '[]',
+      position REAL NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (boardId) REFERENCES kanban_boards(id) ON DELETE CASCADE,
+      FOREIGN KEY (sectionId) REFERENCES kanban_sections(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS kanban_card_blocks (
+      id TEXT PRIMARY KEY,
+      cardId TEXT NOT NULL,
+      type TEXT NOT NULL,
+      position REAL NOT NULL DEFAULT 0,
+      content TEXT NOT NULL DEFAULT '',
+      src TEXT NOT NULL DEFAULT '',
+      alt TEXT NOT NULL DEFAULT '',
+      caption TEXT NOT NULL DEFAULT '',
+      language TEXT NOT NULL DEFAULT '',
+      url TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      platform TEXT NOT NULL DEFAULT '',
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (cardId) REFERENCES kanban_cards(id) ON DELETE CASCADE
+    );
+
     -- Indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_time_entries_status ON time_entries(status);
     CREATE INDEX IF NOT EXISTS idx_time_entries_startedAt ON time_entries(startedAt);
     CREATE INDEX IF NOT EXISTS idx_time_entries_projectId ON time_entries(projectId);
     CREATE INDEX IF NOT EXISTS idx_time_entries_clientId ON time_entries(clientId);
     CREATE INDEX IF NOT EXISTS idx_break_entries_timeEntryId ON break_entries(timeEntryId);
+    CREATE INDEX IF NOT EXISTS idx_kanban_sections_board_position ON kanban_sections(boardId, position);
+    CREATE INDEX IF NOT EXISTS idx_kanban_cards_section_position ON kanban_cards(sectionId, position);
+    CREATE INDEX IF NOT EXISTS idx_kanban_card_blocks_card_position ON kanban_card_blocks(cardId, position);
 
     -- Default workspace
     INSERT OR IGNORE INTO workspaces (id, name) VALUES ('default', 'Default Workspace');

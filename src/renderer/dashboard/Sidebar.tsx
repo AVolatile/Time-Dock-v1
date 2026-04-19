@@ -2,6 +2,7 @@ import {
   Clock,
   Download,
   FolderOpen,
+  KanbanSquare,
   LayoutDashboard,
   Settings,
   TimerReset,
@@ -10,12 +11,14 @@ import {
 import { useAppStore } from '../store'
 import { StatusBadge } from '../components/ui'
 import { useLiveSessionTimer } from '../hooks/useLiveSessionTimer'
+import { CURRENT_APP_VERSION } from '../data/releaseHistory'
 
 export const navItems = [
   { id: 'overview', label: 'Overview', group: 'Track', icon: LayoutDashboard },
   { id: 'logs', label: 'Time Logs', group: 'Track', icon: Clock },
   { id: 'projects', label: 'Projects', group: 'Manage', icon: FolderOpen },
   { id: 'clients', label: 'Clients', group: 'Manage', icon: Users },
+  { id: 'kanban', label: 'KanBan', group: 'Output', icon: KanbanSquare },
   { id: 'exports', label: 'Exports', group: 'Output', icon: Download },
   { id: 'settings', label: 'Settings', group: 'Output', icon: Settings }
 ] as const
@@ -77,7 +80,7 @@ export default function Sidebar() {
 
       <div className="td-sidebar-footer">
         <div className="flex items-center justify-between">
-          <span>TimeDock v1.0.0</span>
+          <span>TimeDock v{CURRENT_APP_VERSION}</span>
           <span>{clients.length} clients</span>
         </div>
         <div className="mt-1 flex items-center justify-between">

@@ -368,7 +368,7 @@ export function Dialog({
   children: React.ReactNode
   footer?: React.ReactNode
   onClose: () => void
-  maxWidth?: 'sm' | 'md' | 'lg'
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl'
 }) {
   return (
     <div className="td-dialog-backdrop animate-fade-in" onMouseDown={onClose}>

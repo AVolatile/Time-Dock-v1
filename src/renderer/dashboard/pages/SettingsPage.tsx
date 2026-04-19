@@ -1,6 +1,8 @@
 import type React from 'react'
 import { Database, HardDrive, Info, Lock, Settings as SettingsIcon, ShieldCheck, SunMoon } from 'lucide-react'
 import { AppearanceToggle, PageHeader, Panel, Pill, SectionHeader } from '../../components/ui'
+import { ReleaseHistory } from '../../components/settings/ReleaseHistory'
+import { CURRENT_APP_VERSION } from '../../data/releaseHistory'
 import { useDashboardTheme } from '../../hooks/useDashboardTheme'
 
 export default function SettingsPage() {
@@ -11,7 +13,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Preferences"
         title="Settings"
-        description="Review the local-first app environment and operational defaults currently available in TimeDock."
+        description="Review the local-first app environment, operational defaults, and product update history."
         meta={<Pill tone="accent">Local-first</Pill>}
       />
 
@@ -24,7 +26,7 @@ export default function SettingsPage() {
               compact
             />
             <div className="divide-y divide-[color:var(--td-line)]">
-              <SettingsRow icon={<Info className="h-4 w-4" />} label="Version" value="1.0.0" />
+              <SettingsRow icon={<Info className="h-4 w-4" />} label="Version" value={CURRENT_APP_VERSION} />
               <SettingsRow icon={<SettingsIcon className="h-4 w-4" />} label="Interface" value="Electron + React + TypeScript" />
               <SettingsRow icon={<ShieldCheck className="h-4 w-4" />} label="Mode" value="Single-user local workspace" />
             </div>
@@ -83,6 +85,10 @@ export default function SettingsPage() {
             </div>
           </Panel>
         </aside>
+      </div>
+
+      <div className="mt-4">
+        <ReleaseHistory />
       </div>
     </div>
   )

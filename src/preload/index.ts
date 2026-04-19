@@ -8,7 +8,14 @@ import type {
   ExportPayload,
   ClientPayload,
   ProjectPayload,
-  TaskPayload
+  TaskPayload,
+  KanbanSectionPayload,
+  UpdateKanbanSectionPayload,
+  ReorderKanbanSectionsPayload,
+  KanbanCardPayload,
+  UpdateKanbanCardPayload,
+  MoveKanbanCardPayload,
+  ReorderKanbanCardsPayload
 } from '@shared/types'
 
 type IpcResult<T = any> = { success: true; data: T } | { success: false; error: string }
@@ -62,6 +69,18 @@ const api = {
   exportPDF: (payload: ExportPayload) => invoke(IPC_CHANNELS.EXPORT_PDF, payload),
   exportCSV: (payload: ExportPayload) => invoke(IPC_CHANNELS.EXPORT_CSV, payload),
   getExportHistory: () => invoke(IPC_CHANNELS.GET_EXPORT_HISTORY),
+
+  // KanBan notes
+  getKanbanBoard: (boardId?: string) => invoke(IPC_CHANNELS.KANBAN_GET_BOARD, boardId),
+  createKanbanSection: (payload: KanbanSectionPayload) => invoke(IPC_CHANNELS.KANBAN_CREATE_SECTION, payload),
+  updateKanbanSection: (payload: UpdateKanbanSectionPayload) => invoke(IPC_CHANNELS.KANBAN_UPDATE_SECTION, payload),
+  deleteKanbanSection: (id: string) => invoke(IPC_CHANNELS.KANBAN_DELETE_SECTION, id),
+  reorderKanbanSections: (payload: ReorderKanbanSectionsPayload) => invoke(IPC_CHANNELS.KANBAN_REORDER_SECTIONS, payload),
+  createKanbanCard: (payload: KanbanCardPayload) => invoke(IPC_CHANNELS.KANBAN_CREATE_CARD, payload),
+  updateKanbanCard: (payload: UpdateKanbanCardPayload) => invoke(IPC_CHANNELS.KANBAN_UPDATE_CARD, payload),
+  deleteKanbanCard: (id: string) => invoke(IPC_CHANNELS.KANBAN_DELETE_CARD, id),
+  moveKanbanCard: (payload: MoveKanbanCardPayload) => invoke(IPC_CHANNELS.KANBAN_MOVE_CARD, payload),
+  reorderKanbanCards: (payload: ReorderKanbanCardsPayload) => invoke(IPC_CHANNELS.KANBAN_REORDER_CARDS, payload),
 
   // Windows
   openDashboard: () => invoke(IPC_CHANNELS.OPEN_DASHBOARD),
