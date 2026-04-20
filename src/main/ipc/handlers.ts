@@ -63,6 +63,10 @@ export function registerIpcHandlers(): void {
     return timeTrackingService.switchProject(payload.projectId, payload.taskId, payload.clientId)
   }))
 
+  ipcMain.handle(IPC_CHANNELS.SWITCH_CLIENT, handleError((payload: { clientId: string }) => {
+    return timeTrackingService.switchClient(payload.clientId)
+  }))
+
   // --- Entries ---
   ipcMain.handle(IPC_CHANNELS.GET_ENTRIES, handleError((filter: EntriesFilter) => {
     return entryService.getEntries(filter)

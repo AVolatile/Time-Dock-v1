@@ -302,6 +302,7 @@ export const IPC_CHANNELS = {
   END_BREAK: 'time:end-break',
   GET_ACTIVE_SESSION: 'time:get-active-session',
   SWITCH_PROJECT: 'time:switch-project',
+  SWITCH_CLIENT: 'time:switch-client',
 
   // Time entries
   GET_ENTRIES: 'entries:get',

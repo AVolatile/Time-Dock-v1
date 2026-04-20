@@ -1,5 +1,6 @@
 import { timeEntryRepo } from '../database/repositories/timeEntryRepo'
 import { breakEntryRepo } from '../database/repositories/breakEntryRepo'
+import { clientRepo } from '../database/repositories/entityRepos'
 import { nowISO, secondsSince } from '@shared/utils'
 import {
   EntryStatus,
@@ -145,6 +146,46 @@ export const timeTrackingService = {
       clientId: clientId || active.clientId,
       projectId,
       taskId: taskId || null,
+      status: EntryStatus.Active,
+      startedAt: endedAt,
+      billable: active.billable,
+      note: null,
+      source: EntrySource.Timer
+    })
+
+    return this.getActiveSession()!
+  },
+
+  switchClient(clientId: string): ActiveSession {
+    const active = timeEntryRepo.getActive()
+    if (!active) {
+      throw new Error('Cannot switch client — no active session. Clock in first.')
+    }
+
+    const client = clientRepo.getById(clientId)
+    if (!client || !client.active) {
+      throw new Error('Choose an active client before switching.')
+    }
+
+    if (active.clientId === clientId && !active.projectId && !active.taskId) {
+      return this.getActiveSession()!
+    }
+
+    const endedAt = nowISO()
+    const activeBreak = breakEntryRepo.getActiveForEntry(active.id)
+    if (activeBreak) {
+      breakEntryRepo.end(activeBreak.id, endedAt)
+    }
+    timeEntryRepo.update(active.id, {
+      status: EntryStatus.Completed,
+      endedAt
+    })
+
+    timeEntryRepo.create({
+      workspaceId: 'default',
+      clientId,
+      projectId: null,
+      taskId: null,
       status: EntryStatus.Active,
       startedAt: endedAt,
       billable: active.billable,

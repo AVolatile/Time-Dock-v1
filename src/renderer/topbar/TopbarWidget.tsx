@@ -1,30 +1,28 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import {
-  BarChart3,
   Briefcase,
   Building2,
   Check,
   ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
-  Clock,
-  Coffee,
-  FolderOpen,
+  Handshake,
   LayoutDashboard,
-  ListChecks,
-  TimerReset
+  PanelsTopLeft,
+  StickyNote
 } from 'lucide-react'
-import { WorkStatus, type Client, type DaySummary, type Project, type TimeEntryWithRelations, type WeekSummary } from '@shared/types'
+import { WorkStatus, type Client, type KanbanCardPayload, type Lead, type Project, type TimeEntryWithRelations } from '@shared/types'
 import { formatDuration, startOfDay } from '@shared/utils'
 import { useAppStore } from '../store'
 import { toast, useToastStore } from '../components/toast/toastStore'
 import { UtilitySessionActions } from '../components/time/UtilitySessionActions'
 import { useLiveSessionTimer } from '../hooks/useLiveSessionTimer'
 import { formatEntryWindow, getEntryNetMinutes, getProjectClient, getStatusMeta } from '../lib/viewUtils'
+import OperatorOverview, { LeadFollowUpsSection, QuickCaptureSection } from './OperatorOverview'
 
 type ActiveMenu = 'clients' | 'projects' | null
-type WidgetTab = 'overview' | 'work' | 'logs'
+type WidgetTab = 'overview' | 'leads' | 'notes'
 
 interface MenuPosition {
   left: number
@@ -45,20 +43,23 @@ export default function TopbarWidget() {
     isLoading,
     clients,
     projects,
+    leads,
     entries,
-    daySummary,
-    weekSummary,
+    kanbanBoard,
     refreshSession,
     clockIn,
     clockOut,
     startBreak,
     endBreak,
     switchProject,
+    switchClient,
     loadClients,
     loadProjects,
+    loadLeads,
     loadEntries,
-    loadDaySummary,
-    loadWeekSummary,
+    loadKanbanBoard,
+    createKanbanCard,
+    updateLead,
     setActivePage
   } = useAppStore()
   const toastCount = useToastStore(state => state.toasts.length)
@@ -196,8 +197,8 @@ export default function TopbarWidget() {
 
   async function refreshPanelData() {
     await Promise.all([
-      loadDaySummary(),
-      loadWeekSummary(),
+      loadLeads({ includeArchived: false }),
+      loadKanbanBoard(),
       loadEntries({ startDate: startOfDay(new Date()), limit: 8 })
     ])
   }
@@ -253,10 +254,30 @@ export default function TopbarWidget() {
     }
   }
 
-  const handleClientSelection = (clientId: string) => {
+  const applyClientSelection = (clientId: string) => {
     setSelectedClientId(clientId)
-    if (pendingProject && pendingProject.clientId !== clientId) setPendingProjectId('')
+    if (clientId && pendingProject && pendingProject.clientId !== clientId) setPendingProjectId('')
+  }
+
+  const handleClientSelection = (clientId: string) => {
+    applyClientSelection(clientId)
     setActiveMenu('projects')
+  }
+
+  const handleClientScopeSelection = async (clientId: string) => {
+    applyClientSelection(clientId)
+    setActiveMenu(null)
+    if (!clientId || status === WorkStatus.OffWork || session?.entry.clientId === clientId) return
+
+    const client = clients.find(item => item.id === clientId)
+    try {
+      await switchClient(clientId)
+      setPendingProjectId('')
+      refreshPanelData().catch(() => undefined)
+      toast.success('Client switched', client?.name || 'Active client updated')
+    } catch (error: any) {
+      toast.error('Client switch failed', error.message || 'The active client could not be updated.')
+    }
   }
 
   const handleProjectSelection = async (project: Project) => {
@@ -287,6 +308,23 @@ export default function TopbarWidget() {
       await window.api.openDashboard()
     } catch (error: any) {
       toast.error('Dashboard failed to open', error.message)
+    }
+  }
+
+  const handleCreateKanbanCard = async (payload: KanbanCardPayload) => {
+    await createKanbanCard(payload)
+  }
+
+  const handleLeadContacted = async (lead: Lead) => {
+    try {
+      await updateLead({
+        id: lead.id,
+        lastContactAt: new Date().toISOString(),
+        status: lead.status === 'new' ? 'contacted' : lead.status
+      })
+      toast.success('Lead marked contacted', lead.companyName)
+    } catch (error: any) {
+      toast.error('Lead update failed', error.message || 'The lead could not be updated.')
     }
   }
 
@@ -357,7 +395,7 @@ export default function TopbarWidget() {
               onEndBreak={handleEndBreak}
             />
             {isExpandedContentMounted && (
-              <button type="button" onClick={() => handleOpenDashboard(activeTab)} className="topbar-icon-btn" aria-label="Open dashboard">
+              <button type="button" onClick={() => handleOpenDashboard(activeTab === 'leads' ? 'leads' : activeTab === 'notes' ? 'kanban' : 'overview')} className="topbar-icon-btn" aria-label="Open dashboard">
                 <LayoutDashboard className="h-3.5 w-3.5" />
               </button>
             )}
@@ -376,33 +414,44 @@ export default function TopbarWidget() {
         {isExpandedContentMounted && (
           <div className={`widget-dashboard ${isExpanded ? 'widget-content-enter' : 'widget-content-exit'}`} style={{ WebkitAppRegion: 'no-drag' } as any}>
             <div className="widget-tabbar" role="tablist" aria-label="Topbar widget sections">
-              <WidgetTabButton active={activeTab === 'overview'} icon={<BarChart3 className="h-3.5 w-3.5" />} label="Overview" onClick={() => setActiveTab('overview')} />
-              <WidgetTabButton active={activeTab === 'work'} icon={<FolderOpen className="h-3.5 w-3.5" />} label="Work" onClick={() => setActiveTab('work')} />
-              <WidgetTabButton active={activeTab === 'logs'} icon={<ListChecks className="h-3.5 w-3.5" />} label="Logs" onClick={() => setActiveTab('logs')} />
+              <WidgetTabButton active={activeTab === 'overview'} icon={<PanelsTopLeft className="h-3.5 w-3.5" />} label="Overview" onClick={() => setActiveTab('overview')} />
+              <WidgetTabButton active={activeTab === 'leads'} icon={<Handshake className="h-3.5 w-3.5" />} label="Leads" onClick={() => setActiveTab('leads')} />
+              <WidgetTabButton active={activeTab === 'notes'} icon={<StickyNote className="h-3.5 w-3.5" />} label="Notes" onClick={() => setActiveTab('notes')} />
             </div>
 
             {activeTab === 'overview' && (
-              <OverviewPanel
-                daySummary={daySummary}
-                entries={recentEntries}
-                onOpenDashboard={() => handleOpenDashboard('overview')}
-                status={status}
-                timer={timer}
-                weekSummary={weekSummary}
+              <div className="widget-overview-stack">
+                <OperatorOverview
+                  breakTimer={breakTimer}
+                  clients={clients}
+                  currentClient={currentClient}
+                  currentProject={currentProject}
+                  currentProjectId={session?.entry.projectId || pendingProjectId}
+                  onClientSelect={handleClientScopeSelection}
+                  onProjectSelect={handleProjectSelection}
+                  projects={projects}
+                  selectedClientId={selectedClientId}
+                  status={status}
+                  timer={timer}
+                />
+                <LogsPanel entries={recentEntries} onOpenDashboard={() => handleOpenDashboard('logs')} />
+              </div>
+            )}
+            {activeTab === 'leads' && (
+              <LeadFollowUpsSection
+                leads={leads}
+                onLeadContacted={handleLeadContacted}
+                onOpenLeads={() => handleOpenDashboard('leads')}
               />
             )}
-            {activeTab === 'work' && (
-              <WorkPanel
-                clients={activeClients}
-                currentProjectId={session?.entry.projectId || pendingProjectId}
-                onClientSelect={handleClientSelection}
-                onProjectSelect={handleProjectSelection}
-                projects={activeProjects}
-                selectedClientId={selectedClientId}
+            {activeTab === 'notes' && (
+              <QuickCaptureSection
+                currentClient={currentClient}
+                currentProject={currentProject}
+                kanbanBoard={kanbanBoard}
+                onCreateKanbanCard={handleCreateKanbanCard}
+                onOpenKanban={() => handleOpenDashboard('kanban')}
               />
-            )}
-            {activeTab === 'logs' && (
-              <LogsPanel entries={recentEntries} onOpenDashboard={() => handleOpenDashboard('logs')} />
             )}
           </div>
         )}
@@ -441,129 +490,12 @@ function WidgetTabButton({ active, icon, label, onClick }: { active: boolean; ic
   )
 }
 
-function OverviewPanel({
-  daySummary,
-  entries,
-  onOpenDashboard,
-  status,
-  timer,
-  weekSummary
-}: {
-  daySummary: DaySummary | null
-  entries: TimeEntryWithRelations[]
-  onOpenDashboard: () => void
-  status: WorkStatus
-  timer: string
-  weekSummary: WeekSummary | null
-}) {
-  return (
-    <div className="widget-panel-grid">
-      <section className="widget-session">
-        <div className="widget-session-copy">
-          <span className={`utility-badge ${utilityBadgeClass(status)}`}>
-            <span className={`td-status-dot ${getStatusMeta(status).dotClass}`} />
-            {getStatusMeta(status).label}
-          </span>
-          <div className={`widget-session-timer td-mono ${utilityStatusClass(status)}`}>{timer}</div>
-          <p className="widget-session-caption utility-muted">Today and week context.</p>
-        </div>
-        <button type="button" onClick={onOpenDashboard} className="utility-button">
-          <LayoutDashboard className="h-3.5 w-3.5" />
-          Open
-        </button>
-      </section>
-
-      <div className="widget-metrics">
-        <MetricCard icon={<Clock className="h-4 w-4" />} label="Today" value={daySummary ? formatDuration(daySummary.netMinutes) : '0m'} detail={`${daySummary?.entryCount || 0} entries`} />
-        <MetricCard icon={<TimerReset className="h-4 w-4" />} label="Week" value={weekSummary ? formatDuration(weekSummary.netMinutes) : '0m'} detail={`${weekSummary?.entryCount || 0} entries`} />
-        <MetricCard icon={<Coffee className="h-4 w-4" />} label="Breaks" value={weekSummary ? formatDuration(weekSummary.breakMinutes) : '0m'} detail="This week" />
-      </div>
-
-      <section className="widget-section">
-        <SectionHeader title="Recent Work" actionLabel="Open Logs" onAction={onOpenDashboard} />
-        <EntryList entries={entries} compact />
-      </section>
-    </div>
-  )
-}
-
-function WorkPanel({
-  clients,
-  currentProjectId,
-  onClientSelect,
-  onProjectSelect,
-  projects,
-  selectedClientId
-}: {
-  clients: Client[]
-  currentProjectId?: string | null
-  onClientSelect: (clientId: string) => void
-  onProjectSelect: (project: Project) => void
-  projects: Project[]
-  selectedClientId: string
-}) {
-  const visibleProjects = selectedClientId ? projects.filter(project => project.clientId === selectedClientId) : projects
-
-  return (
-    <div className="widget-work-grid">
-      <section className="widget-section">
-        <SectionHeader title="Clients" />
-        <div className="widget-list">
-          <button type="button" onClick={() => onClientSelect('')} className={`widget-list-row ${!selectedClientId ? 'widget-list-row-active' : ''}`}>
-            <span>All clients</span>
-            {!selectedClientId && <Check className="h-3.5 w-3.5" />}
-          </button>
-          {clients.map(client => (
-            <button key={client.id} type="button" onClick={() => onClientSelect(client.id)} className={`widget-list-row ${selectedClientId === client.id ? 'widget-list-row-active' : ''}`}>
-              <span className="min-w-0">
-                <span className="block truncate">{client.name}</span>
-                {client.code && <span className="block truncate text-[10px] utility-muted">{client.code}</span>}
-              </span>
-              {selectedClientId === client.id && <Check className="h-3.5 w-3.5 shrink-0" />}
-            </button>
-          ))}
-          {clients.length === 0 && <div className="utility-empty">No active clients</div>}
-        </div>
-      </section>
-
-      <section className="widget-section">
-        <SectionHeader title="Projects" />
-        <div className="widget-list">
-          {visibleProjects.map(project => (
-            <button key={project.id} type="button" onClick={() => onProjectSelect(project)} className={`widget-list-row ${currentProjectId === project.id ? 'widget-list-row-active' : ''}`}>
-              <span className="min-w-0">
-                <span className="block truncate">{project.name}</span>
-                <span className="block truncate text-[10px] utility-muted">{project.code || 'No project code'}</span>
-              </span>
-              {currentProjectId === project.id && <Check className="h-3.5 w-3.5 shrink-0" />}
-            </button>
-          ))}
-          {visibleProjects.length === 0 && <div className="utility-empty">No active projects for this client</div>}
-        </div>
-      </section>
-    </div>
-  )
-}
-
 function LogsPanel({ entries, onOpenDashboard }: { entries: TimeEntryWithRelations[]; onOpenDashboard: () => void }) {
   return (
     <section className="widget-section widget-section-fill">
       <SectionHeader title="Recent Time Logs" actionLabel="Open Logs" onAction={onOpenDashboard} />
       <EntryList entries={entries} />
     </section>
-  )
-}
-
-function MetricCard({ detail, icon, label, value }: { detail: string; icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="widget-metric">
-      <div className="flex items-center justify-between gap-3">
-        <span className="utility-muted">{icon}</span>
-        <span className="text-[10px] font-bold uppercase utility-muted">{label}</span>
-      </div>
-      <div className="mt-2 text-base font-bold utility-title">{value}</div>
-      <div className="mt-1 text-[10px] utility-muted">{detail}</div>
-    </div>
   )
 }
 

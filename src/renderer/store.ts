@@ -56,6 +56,7 @@ interface AppState {
   startBreak: () => Promise<void>
   endBreak: () => Promise<void>
   switchProject: (projectId: string, taskId?: string, clientId?: string) => Promise<void>
+  switchClient: (clientId: string) => Promise<void>
   loadClients: () => Promise<void>
   loadProjects: (clientId?: string) => Promise<void>
   loadTasks: (projectId?: string) => Promise<void>
@@ -160,6 +161,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true })
     try {
       const session = await window.api.switchProject({ projectId, taskId, clientId })
+      set({ session: session as ActiveSession, isLoading: false })
+    } catch (e: any) {
+      set({ isLoading: false })
+      throw e
+    }
+  },
+
+  switchClient: async (clientId) => {
+    set({ isLoading: true })
+    try {
+      const session = await window.api.switchClient({ clientId })
       set({ session: session as ActiveSession, isLoading: false })
     } catch (e: any) {
       set({ isLoading: false })

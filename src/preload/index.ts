@@ -40,6 +40,7 @@ const api = {
   getActiveSession: () => invoke(IPC_CHANNELS.GET_ACTIVE_SESSION),
   switchProject: (payload: { projectId: string; taskId?: string; clientId?: string }) =>
     invoke(IPC_CHANNELS.SWITCH_PROJECT, payload),
+  switchClient: (payload: { clientId: string }) => invoke(IPC_CHANNELS.SWITCH_CLIENT, payload),
 
   // Time entries
   getEntries: (filter?: EntriesFilter) => invoke(IPC_CHANNELS.GET_ENTRIES, filter || {}),
