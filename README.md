@@ -42,6 +42,13 @@ Designed for the solo operator, the elite freelancer, and the agile small agency
    npm run build
    ```
 
+4. **Install Locally to Applications**:
+   ```bash
+   npm run install:local
+   ```
+
+   This builds the production Electron app, rebuilds native dependencies for macOS, installs `TimeDock.app` into `/Applications`, clears local quarantine metadata when present, and applies the local ad-hoc signature macOS needs to run the app from your machine.
+
 ## 📦 Production Release Build (macOS)
 
 To generate a standalone, native macOS `.app` bundle and a distributable `.dmg` installer artifact, simply execute the package script:

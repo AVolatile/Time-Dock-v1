@@ -10,6 +10,7 @@
     "postinstall": "electron-builder install-app-deps",
     "package": "electron-vite build && electron-builder --mac",
     "make": "npm run package",
+    "install:local": "npm run package && node scripts/install-mac-app.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "author": "TimeDock",

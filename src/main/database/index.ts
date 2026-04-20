@@ -1,12 +1,22 @@
-import Database from 'better-sqlite3'
+import type Database from 'better-sqlite3'
 import path from 'path'
 import { app } from 'electron'
 
 let db: Database.Database | null = null
+let DatabaseConstructor: typeof Database | null = null
+
+function getDatabaseConstructor(): typeof Database {
+  if (!DatabaseConstructor) {
+    DatabaseConstructor = require('better-sqlite3') as typeof Database
+  }
+
+  return DatabaseConstructor
+}
 
 export function getDatabase(): Database.Database {
   if (!db) {
     const dbPath = path.join(app.getPath('userData'), 'timedock.db')
+    const Database = getDatabaseConstructor()
     db = new Database(dbPath)
     db.pragma('journal_mode = WAL')
     db.pragma('foreign_keys = ON')

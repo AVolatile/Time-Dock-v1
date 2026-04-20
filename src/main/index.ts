@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen } from 'electron'
 import type { NativeImage, Rectangle } from 'electron'
 import path from 'path'
+import { appendFileSync, existsSync } from 'fs'
 import { getDatabase, closeDatabase } from './database/index'
 import { registerIpcHandlers } from './ipc/handlers'
 import { timeTrackingService } from './services/timeTrackingService'
@@ -21,6 +22,31 @@ const WIDGET_EDGE_OFFSET = 14
 const WIDGET_TOP_OFFSET = 10
 let topbarSurfaceOpen = false
 let topbarExpanded = false
+
+function runtimeLog(message: string, error?: unknown): void {
+  if (!app.isPackaged) return
+
+  const logPath = path.join(app.getPath('userData'), 'timedock-runtime.log')
+  const details = error instanceof Error ? ` ${error.stack ?? error.message}` : error ? ` ${String(error)}` : ''
+  appendFileSync(logPath, `[${new Date().toISOString()}] ${message}${details}\n`)
+}
+
+function getWindowIconPath(): string | undefined {
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.icns')
+    : path.join(__dirname, '../../resources/icon.png')
+
+  return existsSync(iconPath) ? iconPath : undefined
+}
+
+function setDockIcon(): void {
+  if (app.isPackaged) return
+
+  const iconPath = getWindowIconPath()
+  if (iconPath) {
+    app.dock.setIcon(iconPath)
+  }
+}
 
 function dashboardSuppressesTopbar(): boolean {
   return Boolean(
@@ -118,6 +144,8 @@ function createTrayIcon(): NativeImage {
 }
 
 function createTopbarWindow({ focus = true }: { focus?: boolean } = {}): void {
+  runtimeLog(`createTopbarWindow focus=${focus}`)
+
   if (dashboardSuppressesTopbar()) {
     hideTopbarForDashboard()
     return
@@ -140,7 +168,7 @@ function createTopbarWindow({ focus = true }: { focus?: boolean } = {}): void {
     ...bounds,
     show: false,
     frame: false,
-    icon: path.join(__dirname, '../../resources/icon.png'),
+    icon: getWindowIconPath(),
     resizable: false,
     movable: true,
     alwaysOnTop: false,
@@ -164,6 +192,7 @@ function createTopbarWindow({ focus = true }: { focus?: boolean } = {}): void {
   }
 
   topbarWindow.once('ready-to-show', () => {
+    runtimeLog('topbar ready-to-show')
     if (dashboardSuppressesTopbar()) {
       topbarWindow?.hide()
     } else if (focus) {
@@ -175,7 +204,16 @@ function createTopbarWindow({ focus = true }: { focus?: boolean } = {}): void {
   })
 
   topbarWindow.on('closed', () => {
+    runtimeLog('topbar closed')
     topbarWindow = null
+  })
+
+  topbarWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    runtimeLog(`topbar did-fail-load ${errorCode}: ${errorDescription}`)
+  })
+
+  topbarWindow.webContents.on('render-process-gone', (_event, details) => {
+    runtimeLog(`topbar render-process-gone ${details.reason}`)
   })
 }
 
@@ -196,7 +234,7 @@ function createDashboardWindow(): void {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    icon: path.join(__dirname, '../../resources/icon.png'),
+    icon: getWindowIconPath(),
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     vibrancy: 'under-window',
@@ -244,6 +282,7 @@ function createDashboardWindow(): void {
 }
 
 function setupTray(): void {
+  runtimeLog('setupTray')
   const icon = createTrayIcon()
   tray = new Tray(icon)
   tray.setToolTip('TimeDock')
@@ -273,43 +312,53 @@ function setupTray(): void {
 // --- App Lifecycle ---
 
 app.whenReady().then(() => {
-  if (process.platform === 'darwin') {
-    app.dock.setIcon(path.join(__dirname, '../../resources/icon.png'))
+  try {
+    runtimeLog('app ready')
+    if (process.platform === 'darwin') {
+      setDockIcon()
+    }
+    runtimeLog('opening database')
+    getDatabase()
+    runtimeLog('seeding database')
+    seedDatabase()
+    runtimeLog('registering ipc')
+    registerIpcHandlers()
+
+    ipcMain.handle(IPC_CHANNELS.OPEN_DASHBOARD, () => {
+      createDashboardWindow()
+      return { success: true, data: true }
+    })
+
+    ipcMain.handle(IPC_CHANNELS.CLOSE_TRAY_POPUP, () => {
+      topbarWindow?.hide()
+      return { success: true, data: true }
+    })
+
+    ipcMain.handle(IPC_CHANNELS.SET_TOPBAR_MENU_OPEN, (_event, open: boolean) => {
+      setTopbarSurfaceOpen(open)
+      return { success: true, data: true }
+    })
+
+    ipcMain.handle(IPC_CHANNELS.SET_TOPBAR_MINIMIZED, (_event, minimized: boolean) => {
+      setTopbarMinimized(minimized)
+      return { success: true, data: true }
+    })
+
+    ipcMain.handle(IPC_CHANNELS.SET_TOPBAR_EXPANDED, (_event, expanded: boolean) => {
+      setTopbarExpanded(expanded)
+      return { success: true, data: true }
+    })
+
+    setupTray()
+    runtimeLog('restoring session')
+    timeTrackingService.restoreSession()
+
+    // Launch the topbar on startup
+    createTopbarWindow()
+  } catch (error) {
+    runtimeLog('startup failed', error)
+    throw error
   }
-  getDatabase()
-  seedDatabase()
-  registerIpcHandlers()
-
-  ipcMain.handle(IPC_CHANNELS.OPEN_DASHBOARD, () => {
-    createDashboardWindow()
-    return { success: true, data: true }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.CLOSE_TRAY_POPUP, () => {
-    topbarWindow?.hide()
-    return { success: true, data: true }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.SET_TOPBAR_MENU_OPEN, (_event, open: boolean) => {
-    setTopbarSurfaceOpen(open)
-    return { success: true, data: true }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.SET_TOPBAR_MINIMIZED, (_event, minimized: boolean) => {
-    setTopbarMinimized(minimized)
-    return { success: true, data: true }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.SET_TOPBAR_EXPANDED, (_event, expanded: boolean) => {
-    setTopbarExpanded(expanded)
-    return { success: true, data: true }
-  })
-
-  setupTray()
-  timeTrackingService.restoreSession()
-
-  // Launch the topbar on startup
-  createTopbarWindow()
 })
 
 app.on('window-all-closed', () => {
@@ -319,8 +368,21 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  runtimeLog('before-quit')
   isQuitting = true
   closeDatabase()
+})
+
+app.on('will-quit', () => {
+  runtimeLog('will-quit')
+})
+
+process.on('uncaughtException', (error) => {
+  runtimeLog('uncaughtException', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  runtimeLog('unhandledRejection', reason)
 })
 
 app.on('activate', () => {
