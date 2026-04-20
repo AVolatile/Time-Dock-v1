@@ -55,6 +55,52 @@ export interface Client {
   updatedAt: string
 }
 
+export const LEAD_STATUSES = [
+  'new',
+  'contacted',
+  'discovery',
+  'proposal_sent',
+  'negotiation',
+  'won',
+  'lost'
+] as const
+
+export type LeadStatus = typeof LEAD_STATUSES[number]
+
+export const LEAD_SOURCES = [
+  'cold_call',
+  'referral',
+  'inbound',
+  'networking',
+  'repeat_client',
+  'other'
+] as const
+
+export type LeadSource = typeof LEAD_SOURCES[number]
+
+export interface Lead {
+  id: string
+  companyName: string
+  contactName: string | null
+  email: string | null
+  phone: string | null
+  website: string | null
+  source: LeadSource
+  status: LeadStatus
+  estimatedValueCents: number
+  serviceType: string | null
+  lastContactAt: string | null
+  nextFollowUpAt: string | null
+  nextAction: string | null
+  notes: string | null
+  isArchived: boolean
+  displayOrder: number
+  convertedClientId: string | null
+  convertedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Project {
   id: string
   clientId: string
@@ -272,6 +318,13 @@ export const IPC_CHANNELS = {
   UPDATE_CLIENT: 'clients:update',
   DELETE_CLIENT: 'clients:delete',
 
+  // Leads
+  GET_LEADS: 'leads:get',
+  CREATE_LEAD: 'leads:create',
+  UPDATE_LEAD: 'leads:update',
+  ARCHIVE_LEAD: 'leads:archive',
+  CONVERT_LEAD_TO_CLIENT: 'leads:convert-to-client',
+
   // Projects
   GET_PROJECTS: 'projects:get',
   CREATE_PROJECT: 'projects:create',
@@ -373,6 +426,39 @@ export interface ClientPayload {
   name: string
   code?: string
   active?: boolean
+}
+
+export interface LeadsFilter {
+  status?: LeadStatus
+  search?: string
+  includeArchived?: boolean
+}
+
+export interface LeadPayload {
+  companyName: string
+  contactName?: string | null
+  email?: string | null
+  phone?: string | null
+  website?: string | null
+  source: LeadSource
+  status: LeadStatus
+  estimatedValueCents?: number
+  serviceType?: string | null
+  lastContactAt?: string | null
+  nextFollowUpAt?: string | null
+  nextAction?: string | null
+  notes?: string | null
+  isArchived?: boolean
+  displayOrder?: number
+}
+
+export interface UpdateLeadPayload extends Partial<LeadPayload> {
+  id: string
+}
+
+export interface ConvertLeadToClientResult {
+  lead: Lead
+  client: Client
 }
 
 export interface ProjectPayload {

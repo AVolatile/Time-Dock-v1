@@ -2,8 +2,13 @@ import { create } from 'zustand'
 import type {
   ActiveSession,
   Client,
+  ConvertLeadToClientResult,
   Project,
   Task,
+  Lead,
+  LeadPayload,
+  LeadsFilter,
+  UpdateLeadPayload,
   TimeEntryWithRelations,
   DaySummary,
   WeekSummary,
@@ -28,6 +33,8 @@ interface AppState {
   clients: Client[]
   projects: Project[]
   tasks: Task[]
+  leads: Lead[]
+  leadsFilter: LeadsFilter
 
   // Logs
   entries: TimeEntryWithRelations[]
@@ -52,6 +59,11 @@ interface AppState {
   loadClients: () => Promise<void>
   loadProjects: (clientId?: string) => Promise<void>
   loadTasks: (projectId?: string) => Promise<void>
+  loadLeads: (filter?: LeadsFilter) => Promise<void>
+  createLead: (payload: LeadPayload) => Promise<Lead>
+  updateLead: (payload: UpdateLeadPayload) => Promise<Lead>
+  deleteOrArchiveLead: (id: string, archived?: boolean) => Promise<Lead>
+  convertLeadToClient: (id: string) => Promise<ConvertLeadToClientResult>
   createTask: (payload: any) => Promise<void>
   updateTask: (payload: { id: string } & any) => Promise<void>
   deleteTask: (id: string) => Promise<void>
@@ -77,6 +89,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   clients: [],
   projects: [],
   tasks: [],
+  leads: [],
+  leadsFilter: {},
   entries: [],
   entriesFilter: {},
   daySummary: null,
@@ -166,6 +180,36 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadTasks: async (projectId) => {
     const tasks = await window.api.getTasks(projectId)
     set({ tasks: tasks as Task[] })
+  },
+
+  loadLeads: async (filter) => {
+    const currentFilter = filter || get().leadsFilter
+    const leads = await window.api.getLeads(currentFilter)
+    set({ leads: leads as Lead[], leadsFilter: currentFilter })
+  },
+
+  createLead: async (payload) => {
+    const lead = await window.api.createLead(payload) as Lead
+    await get().loadLeads()
+    return lead
+  },
+
+  updateLead: async (payload) => {
+    const lead = await window.api.updateLead(payload) as Lead
+    await get().loadLeads()
+    return lead
+  },
+
+  deleteOrArchiveLead: async (id, archived = true) => {
+    const lead = await window.api.archiveLead(id, archived) as Lead
+    await get().loadLeads()
+    return lead
+  },
+
+  convertLeadToClient: async (id) => {
+    const result = await window.api.convertLeadToClient(id) as ConvertLeadToClientResult
+    await Promise.all([get().loadLeads(), get().loadClients()])
+    return result
   },
 
   createTask: async (payload) => {

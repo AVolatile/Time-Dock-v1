@@ -2,6 +2,7 @@ import {
   Clock,
   Download,
   FolderOpen,
+  Handshake,
   KanbanSquare,
   LayoutDashboard,
   Settings,
@@ -18,6 +19,7 @@ export const navItems = [
   { id: 'logs', label: 'Time Logs', group: 'Track', icon: Clock },
   { id: 'projects', label: 'Projects', group: 'Manage', icon: FolderOpen },
   { id: 'clients', label: 'Clients', group: 'Manage', icon: Users },
+  { id: 'leads', label: 'Leads', group: 'Manage', icon: Handshake },
   { id: 'kanban', label: 'KanBan', group: 'Output', icon: KanbanSquare },
   { id: 'exports', label: 'Exports', group: 'Output', icon: Download },
   { id: 'settings', label: 'Settings', group: 'Output', icon: Settings }

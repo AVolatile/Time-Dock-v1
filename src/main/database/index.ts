@@ -42,6 +42,30 @@ function initializeSchema(database: Database.Database): void {
       FOREIGN KEY (workspaceId) REFERENCES workspaces(id)
     );
 
+    CREATE TABLE IF NOT EXISTS leads (
+      id TEXT PRIMARY KEY,
+      company_name TEXT NOT NULL,
+      contact_name TEXT,
+      email TEXT,
+      phone TEXT,
+      website TEXT,
+      source TEXT NOT NULL,
+      status TEXT NOT NULL,
+      estimated_value_cents INTEGER NOT NULL DEFAULT 0,
+      service_type TEXT,
+      last_contact_at TEXT,
+      next_follow_up_at TEXT,
+      next_action TEXT,
+      notes TEXT,
+      is_archived INTEGER NOT NULL DEFAULT 0,
+      display_order REAL NOT NULL DEFAULT 0,
+      converted_client_id TEXT,
+      converted_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (converted_client_id) REFERENCES clients(id) ON DELETE SET NULL
+    );
+
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       clientId TEXT NOT NULL,
@@ -172,6 +196,11 @@ function initializeSchema(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_time_entries_projectId ON time_entries(projectId);
     CREATE INDEX IF NOT EXISTS idx_time_entries_clientId ON time_entries(clientId);
     CREATE INDEX IF NOT EXISTS idx_break_entries_timeEntryId ON break_entries(timeEntryId);
+    CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+    CREATE INDEX IF NOT EXISTS idx_leads_next_follow_up_at ON leads(next_follow_up_at);
+    CREATE INDEX IF NOT EXISTS idx_leads_company_name ON leads(company_name);
+    CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at);
+    CREATE INDEX IF NOT EXISTS idx_leads_updated_at ON leads(updated_at);
     CREATE INDEX IF NOT EXISTS idx_kanban_sections_board_position ON kanban_sections(boardId, position);
     CREATE INDEX IF NOT EXISTS idx_kanban_cards_section_position ON kanban_cards(sectionId, position);
     CREATE INDEX IF NOT EXISTS idx_kanban_card_blocks_card_position ON kanban_card_blocks(cardId, position);

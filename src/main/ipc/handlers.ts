@@ -7,6 +7,9 @@ import type {
   EntriesFilter,
   ExportPayload,
   ClientPayload,
+  LeadsFilter,
+  LeadPayload,
+  UpdateLeadPayload,
   ProjectPayload,
   TaskPayload,
   KanbanSectionPayload,
@@ -21,6 +24,7 @@ import { timeTrackingService } from '../services/timeTrackingService'
 import { entryService } from '../services/entryService'
 import { exportService } from '../services/exportService'
 import { clientRepo, projectRepo, taskRepo } from '../database/repositories/entityRepos'
+import { leadRepo } from '../database/repositories/leadRepo'
 import { kanbanRepo } from '../database/repositories/kanbanRepo'
 
 function handleError(fn: (...args: any[]) => any) {
@@ -106,6 +110,27 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.DELETE_CLIENT, handleError((id: string) => {
     clientRepo.delete(id)
     return true
+  }))
+
+  // --- Leads ---
+  ipcMain.handle(IPC_CHANNELS.GET_LEADS, handleError((filter?: LeadsFilter) => {
+    return leadRepo.getAll(filter || {})
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.CREATE_LEAD, handleError((payload: LeadPayload) => {
+    return leadRepo.create(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_LEAD, handleError((payload: UpdateLeadPayload) => {
+    return leadRepo.update(payload)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.ARCHIVE_LEAD, handleError((id: string, archived?: boolean) => {
+    return leadRepo.archive(id, archived !== false)
+  }))
+
+  ipcMain.handle(IPC_CHANNELS.CONVERT_LEAD_TO_CLIENT, handleError((id: string) => {
+    return leadRepo.convertToClient(id)
   }))
 
   // --- Projects ---

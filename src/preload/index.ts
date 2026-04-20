@@ -7,6 +7,9 @@ import type {
   EntriesFilter,
   ExportPayload,
   ClientPayload,
+  LeadsFilter,
+  LeadPayload,
+  UpdateLeadPayload,
   ProjectPayload,
   TaskPayload,
   KanbanSectionPayload,
@@ -52,6 +55,13 @@ const api = {
   createClient: (payload: ClientPayload) => invoke(IPC_CHANNELS.CREATE_CLIENT, payload),
   updateClient: (payload: { id: string } & Partial<ClientPayload>) => invoke(IPC_CHANNELS.UPDATE_CLIENT, payload),
   deleteClient: (id: string) => invoke(IPC_CHANNELS.DELETE_CLIENT, id),
+
+  // Leads
+  getLeads: (filter?: LeadsFilter) => invoke(IPC_CHANNELS.GET_LEADS, filter || {}),
+  createLead: (payload: LeadPayload) => invoke(IPC_CHANNELS.CREATE_LEAD, payload),
+  updateLead: (payload: UpdateLeadPayload) => invoke(IPC_CHANNELS.UPDATE_LEAD, payload),
+  archiveLead: (id: string, archived = true) => invoke(IPC_CHANNELS.ARCHIVE_LEAD, id, archived),
+  convertLeadToClient: (id: string) => invoke(IPC_CHANNELS.CONVERT_LEAD_TO_CLIENT, id),
 
   // Projects
   getProjects: (clientId?: string) => invoke(IPC_CHANNELS.GET_PROJECTS, clientId),

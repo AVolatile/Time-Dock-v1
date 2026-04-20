@@ -6,6 +6,7 @@ import OverviewPage from './pages/OverviewPage'
 import TimeLogsPage from './pages/TimeLogsPage'
 import ProjectsPage from './pages/ProjectsPage'
 import ClientsPage from './pages/ClientsPage'
+import LeadsPage from './pages/LeadsPage'
 import KanbanNotesPage from './pages/KanbanNotesPage'
 import ExportsPage from './pages/ExportsPage'
 import SettingsPage from './pages/SettingsPage'
@@ -21,6 +22,7 @@ export default function Dashboard() {
     loadClients,
     loadProjects,
     loadTasks,
+    loadLeads,
     loadDaySummary,
     loadWeekSummary
   } = useAppStore()
@@ -34,6 +36,7 @@ export default function Dashboard() {
     loadClients()
     loadProjects()
     loadTasks()
+    loadLeads()
     loadDaySummary()
     loadWeekSummary()
 
@@ -92,6 +95,8 @@ function renderPage(activePage: string) {
       return <ProjectsPage />
     case 'clients':
       return <ClientsPage />
+    case 'leads':
+      return <LeadsPage />
     case 'kanban':
       return <KanbanNotesPage />
     case 'exports':
