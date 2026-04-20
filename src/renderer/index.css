@@ -4,6 +4,7 @@
 
 :root {
   --td-window: #f4f3ef;
+  --td-window-material: rgba(244, 243, 239, 0.94);
   --td-window-raised: #fbfaf7;
   --td-sidebar: rgba(238, 236, 230, 0.92);
   --td-panel: rgba(255, 255, 252, 0.84);
@@ -38,6 +39,7 @@
 html[data-surface='dashboard'][data-dashboard-theme='dark'],
 body[data-surface='dashboard'][data-dashboard-theme='dark'] {
   --td-window: #1d1e20;
+  --td-window-material: rgba(29, 30, 32, 0.94);
   --td-window-raised: #28292c;
   --td-sidebar: rgba(35, 36, 38, 0.9);
   --td-panel: rgba(43, 44, 47, 0.78);
@@ -143,6 +145,12 @@ body[data-surface='dashboard'][data-dashboard-theme='dark'] {
   html[data-surface='tray'] #root {
     background: transparent;
   }
+
+  html[data-surface='dashboard'],
+  html[data-surface='dashboard'] body,
+  html[data-surface='dashboard'] #root {
+    background: transparent;
+  }
 }
 
 @layer components {
@@ -153,13 +161,14 @@ body[data-surface='dashboard'][data-dashboard-theme='dark'] {
     overflow: hidden;
     background:
       linear-gradient(180deg, rgba(255,255,255,0.54), rgba(255,255,255,0) 34%),
-      var(--td-window);
+      var(--td-window-material);
+    backdrop-filter: blur(24px) saturate(150%);
   }
 
   body[data-surface='dashboard'][data-dashboard-theme='dark'] .td-dashboard-window {
     background:
       linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0) 32%),
-      var(--td-window);
+      var(--td-window-material);
   }
 
   .td-titlebar {
